@@ -7,6 +7,7 @@ mod clipboard;
 mod commands;
 mod helpers;
 mod input;
+mod input_hook;
 mod llm_client;
 mod llm_types;
 mod managers;
@@ -133,8 +134,11 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
 
-    // Initialize the shortcuts
+    // Initialize the keyboard shortcuts
     shortcut::init_shortcuts(app_handle);
+    
+    // Initialize the global input hook for mouse button shortcuts
+    input_hook::init_input_hooks(app_handle);
 
     #[cfg(unix)]
     let signals = Signals::new(&[SIGUSR2]).unwrap();

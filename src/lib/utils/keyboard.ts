@@ -1,5 +1,5 @@
 /**
- * Keyboard utility functions for handling keyboard events
+ * Keyboard and mouse utility functions for handling input events
  */
 
 export type OSType = "macos" | "windows" | "linux" | "unknown";
@@ -155,6 +155,47 @@ export const getKeyName = (
 };
 
 /**
+ * Extract a consistent button name from a MouseEvent
+ * Returns standardized mouse button names that match the backend format
+ */
+export const getMouseButtonName = (e: MouseEvent): string | null => {
+  // e.button values:
+  // 0: Left button (primary)
+  // 1: Middle button (wheel click)
+  // 2: Right button (secondary)
+  // 3: Back button (XButton1) - typically "Mouse 4"
+  // 4: Forward button (XButton2) - typically "Mouse 5"
+  switch (e.button) {
+    case 0:
+      return "mouseleft"; // Left button - usually not used for shortcuts
+    case 1:
+      return "mousemiddle"; // Middle button
+    case 2:
+      return "mouseright"; // Right button - usually not used for shortcuts
+    case 3:
+      return "mouse4"; // Back/XButton1
+    case 4:
+      return "mouse5"; // Forward/XButton2
+    default:
+      // Handle any additional mouse buttons
+      return `mouse${e.button + 1}`;
+  }
+};
+
+/**
+ * Check if an input name represents a mouse button
+ */
+export const isMouseButton = (inputName: string): boolean => {
+  const lower = inputName.toLowerCase();
+  return (
+    lower.startsWith("mouse") ||
+    lower === "mouseleft" ||
+    lower === "mouseright" ||
+    lower === "mousemiddle"
+  );
+};
+
+/**
  * Get display-friendly key combination string for the current OS
  * Returns basic plus-separated format with correct platform key names
  */
@@ -165,6 +206,51 @@ export const formatKeyCombination = (
   // Simply return the combination as-is since getKeyName already provides
   // the correct platform-specific key names
   return combination;
+};
+
+/**
+ * Get display-friendly name for a mouse button
+ */
+export const getMouseButtonDisplayName = (buttonName: string): string => {
+  const displayNames: Record<string, string> = {
+    mouseleft: "Left Click",
+    mouseright: "Right Click",
+    mousemiddle: "Middle Click",
+    mouse1: "Left Click",
+    mouse2: "Right Click",
+    mouse3: "Middle Click",
+    mouse4: "Mouse 4",
+    mouse5: "Mouse 5",
+    mouseforward: "Mouse Forward",
+    mouseback: "Mouse Back",
+  };
+
+  const lower = buttonName.toLowerCase();
+  if (displayNames[lower]) {
+    return displayNames[lower];
+  }
+
+  // Handle any other mouse button numbers
+  const match = lower.match(/^mouse(\d+)$/);
+  if (match) {
+    return `Mouse ${match[1]}`;
+  }
+
+  return buttonName;
+};
+
+/**
+ * Format an input element (key or mouse button) for display
+ */
+export const formatInputDisplay = (inputName: string): string => {
+  if (isMouseButton(inputName)) {
+    return getMouseButtonDisplayName(inputName);
+  }
+  // Capitalize first letter of each word for keyboard keys
+  return inputName
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 };
 
 /**
@@ -181,3 +267,4 @@ export const normalizeKey = (key: string): string => {
   }
   return key;
 };
+

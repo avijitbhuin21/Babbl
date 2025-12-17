@@ -7,6 +7,7 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::actions::ACTION_MAP;
+use crate::input_hook;
 use crate::managers::audio::AudioRecordingManager;
 use crate::settings::ShortcutBinding;
 use crate::settings::{
@@ -818,6 +819,12 @@ fn validate_shortcut_string(raw: &str) -> Result<(), String> {
 #[specta::specta]
 pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
     if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
+        // Check if this is a mouse shortcut
+        if input_hook::contains_mouse_button(&b.current_binding) {
+            input_hook::suspend_mouse_shortcut(&id);
+            return Ok(());
+        }
+        
         if let Err(e) = unregister_shortcut(&app, b) {
             error!("suspend_binding error for id '{}': {}", id, e);
             return Err(e);
@@ -831,6 +838,12 @@ pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
 #[specta::specta]
 pub fn resume_binding(app: AppHandle, id: String) -> Result<(), String> {
     if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
+        // Check if this is a mouse shortcut
+        if input_hook::contains_mouse_button(&b.current_binding) {
+            input_hook::resume_mouse_shortcut(&id);
+            return Ok(());
+        }
+        
         if let Err(e) = register_shortcut(&app, b) {
             error!("resume_binding error for id '{}': {}", id, e);
             return Err(e);
@@ -838,6 +851,7 @@ pub fn resume_binding(app: AppHandle, id: String) -> Result<(), String> {
     }
     Ok(())
 }
+
 
 pub fn register_cancel_shortcut(app: &AppHandle) {
     // Cancel shortcut is disabled on Linux due to instability with dynamic shortcut registration
@@ -890,7 +904,13 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
         return Err(e);
     }
 
-    // Parse shortcut and return error if it fails
+    // Check if this shortcut contains mouse buttons
+    if input_hook::contains_mouse_button(&binding.current_binding) {
+        // Route to input_hook module for mouse-containing shortcuts
+        return input_hook::register_mouse_shortcut(&binding.id, &binding.current_binding);
+    }
+
+    // Parse shortcut and return error if it fails (keyboard-only shortcuts)
     let shortcut = match binding.current_binding.parse::<Shortcut>() {
         Ok(s) => s,
         Err(e) => {
@@ -972,7 +992,14 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
     Ok(())
 }
 
+
 pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<(), String> {
+    // Check if this shortcut contains mouse buttons
+    if input_hook::contains_mouse_button(&binding.current_binding) {
+        // Route to input_hook module for mouse-containing shortcuts
+        return input_hook::unregister_mouse_shortcut(&binding.id);
+    }
+    
     let shortcut = match binding.current_binding.parse::<Shortcut>() {
         Ok(s) => s,
         Err(e) => {
@@ -996,3 +1023,4 @@ pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<
 
     Ok(())
 }
+
