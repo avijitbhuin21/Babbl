@@ -51,7 +51,7 @@ export const SECTIONS_CONFIG = {
     enabled: (settings) => settings?.post_process_enabled ?? false,
   },
   onlineprovider: {
-    labelKey: "sidebar.cloudProviders",
+    labelKey: "sidebar.cloudModels",
     icon: Cloud,
     component: OnlineProviderSettings,
     enabled: (settings) => settings?.use_online_provider ?? false,

@@ -28,6 +28,7 @@ struct TranscribeAction;
 
 /// Online provider configuration for audio transcription
 struct OnlineTranscriptionProvider {
+    provider_id: String,
     base_url: String,
     model: String,
     api_key: String,
@@ -39,12 +40,24 @@ async fn transcribe_online(
     audio_samples: Vec<f32>,
     language: Option<String>,
 ) -> Result<String, String> {
+    // Use different API flow for Gemini (chat completions with audio)
+    if provider.provider_id == "gemini" {
+        return transcribe_online_gemini(provider, audio_samples, language).await;
+    }
+    
+    // Standard OpenAI-compatible /audio/transcriptions flow for OpenAI and Groq
     use hound::{WavSpec, WavWriter};
     use std::io::Cursor;
+    use log::info;
 
+    info!(
+        "[Cloud Transcription] Starting with provider: {} (model: {})",
+        provider.base_url, provider.model
+    );
     debug!(
-        "Starting online transcription with provider base_url: {}",
-        provider.base_url
+        "[Cloud Transcription] API key present: {}, length: {}",
+        !provider.api_key.is_empty(),
+        provider.api_key.len()
     );
 
     // Convert f32 samples to WAV format in memory
@@ -58,26 +71,39 @@ async fn transcribe_online(
     let mut buffer = Cursor::new(Vec::new());
     {
         let mut writer = WavWriter::new(&mut buffer, spec)
-            .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
+            .map_err(|e| {
+                error!("[Cloud Transcription] Failed to create WAV writer: {}", e);
+                format!("Failed to create WAV writer: {}", e)
+            })?;
 
         for sample in &audio_samples {
             // Convert f32 [-1.0, 1.0] to i16
             let i16_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
             writer
                 .write_sample(i16_sample)
-                .map_err(|e| format!("Failed to write sample: {}", e))?;
+                .map_err(|e| {
+                    error!("[Cloud Transcription] Failed to write sample: {}", e);
+                    format!("Failed to write sample: {}", e)
+                })?;
         }
         writer
             .finalize()
-            .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+            .map_err(|e| {
+                error!("[Cloud Transcription] Failed to finalize WAV: {}", e);
+                format!("Failed to finalize WAV: {}", e)
+            })?;
     }
 
     let wav_data = buffer.into_inner();
-    debug!("Created WAV data: {} bytes", wav_data.len());
+    info!("[Cloud Transcription] Created WAV data: {} bytes ({:.1}s of audio)", 
+        wav_data.len(), 
+        audio_samples.len() as f32 / 16000.0
+    );
 
     // Build the transcription endpoint URL
     let base_url = provider.base_url.trim_end_matches('/');
     let endpoint = format!("{}/audio/transcriptions", base_url);
+    info!("[Cloud Transcription] Sending request to: {}", endpoint);
 
     // Create multipart form
     let form = reqwest::multipart::Form::new()
@@ -87,13 +113,17 @@ async fn transcribe_online(
             reqwest::multipart::Part::bytes(wav_data)
                 .file_name("audio.wav")
                 .mime_str("audio/wav")
-                .map_err(|e| format!("Failed to set MIME type: {}", e))?,
+                .map_err(|e| {
+                    error!("[Cloud Transcription] Failed to set MIME type: {}", e);
+                    format!("Failed to set MIME type: {}", e)
+                })?,
         );
 
     // Add language if specified and not "auto"
-    let form = if let Some(lang) = language {
+    let form = if let Some(ref lang) = language {
         if lang != "auto" {
-            form.text("language", lang)
+            info!("[Cloud Transcription] Using language: {}", lang);
+            form.text("language", lang.clone())
         } else {
             form
         }
@@ -103,20 +133,31 @@ async fn transcribe_online(
 
     // Create HTTP client with authorization header
     let client = reqwest::Client::new();
+    info!("[Cloud Transcription] Sending POST request...");
+    
     let response = client
         .post(&endpoint)
         .bearer_auth(&provider.api_key)
         .multipart(form)
         .send()
         .await
-        .map_err(|e| format!("Failed to send transcription request: {}", e))?;
+        .map_err(|e| {
+            error!("[Cloud Transcription] Network error - failed to send request: {}", e);
+            format!("Failed to send transcription request: {}", e)
+        })?;
 
-    if !response.status().is_success() {
-        let status = response.status();
+    let status = response.status();
+    info!("[Cloud Transcription] Received response with status: {}", status);
+
+    if !status.is_success() {
         let error_text = response
             .text()
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
+        error!(
+            "[Cloud Transcription] API ERROR - Status: {}, Provider: {}, Model: {}, Response: {}",
+            status, base_url, provider.model, error_text
+        );
         return Err(format!(
             "Transcription request failed ({}): {}",
             status, error_text
@@ -127,10 +168,18 @@ async fn transcribe_online(
     let response_text = response
         .text()
         .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+        .map_err(|e| {
+            error!("[Cloud Transcription] Failed to read response body: {}", e);
+            format!("Failed to read response: {}", e)
+        })?;
+
+    debug!("[Cloud Transcription] Raw response: {}", response_text);
 
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| {
+            error!("[Cloud Transcription] Failed to parse JSON response: {}. Raw: {}", e, response_text);
+            format!("Failed to parse response: {}", e)
+        })?;
 
     let text = parsed
         .get("text")
@@ -138,8 +187,168 @@ async fn transcribe_online(
         .unwrap_or("")
         .to_string();
 
-    debug!(
-        "Online transcription completed. Result length: {} chars",
+    info!(
+        "[Cloud Transcription] SUCCESS - Transcribed {} chars",
+        text.len()
+    );
+
+    Ok(text)
+}
+
+/// Transcribe audio using Gemini's chat completions API with multimodal input
+async fn transcribe_online_gemini(
+    provider: OnlineTranscriptionProvider,
+    audio_samples: Vec<f32>,
+    language: Option<String>,
+) -> Result<String, String> {
+    use hound::{WavSpec, WavWriter};
+    use std::io::Cursor;
+    use log::info;
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+    info!(
+        "[Cloud Transcription - Gemini] Starting with model: {}",
+        provider.model
+    );
+
+    // Convert f32 samples to WAV format in memory
+    let spec = WavSpec {
+        channels: 1,
+        sample_rate: 16000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut buffer = Cursor::new(Vec::new());
+    {
+        let mut writer = WavWriter::new(&mut buffer, spec)
+            .map_err(|e| {
+                error!("[Cloud Transcription - Gemini] Failed to create WAV writer: {}", e);
+                format!("Failed to create WAV writer: {}", e)
+            })?;
+
+        for sample in &audio_samples {
+            let i16_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
+            writer.write_sample(i16_sample).map_err(|e| {
+                error!("[Cloud Transcription - Gemini] Failed to write sample: {}", e);
+                format!("Failed to write sample: {}", e)
+            })?;
+        }
+        writer.finalize().map_err(|e| {
+            error!("[Cloud Transcription - Gemini] Failed to finalize WAV: {}", e);
+            format!("Failed to finalize WAV: {}", e)
+        })?;
+    }
+
+    let wav_data = buffer.into_inner();
+    let audio_base64 = BASE64.encode(&wav_data);
+    
+    info!("[Cloud Transcription - Gemini] Created WAV data: {} bytes, base64: {} chars", 
+        wav_data.len(), audio_base64.len()
+    );
+
+    // Build the chat completions endpoint URL
+    let base_url = provider.base_url.trim_end_matches('/');
+    let endpoint = format!("{}/chat/completions", base_url);
+    info!("[Cloud Transcription - Gemini] Sending request to: {}", endpoint);
+
+    // Build transcription prompt
+    let transcription_prompt = if let Some(ref lang) = language {
+        if lang != "auto" {
+            format!("Transcribe the following audio to text. The audio is in {}. Output ONLY the transcribed text, nothing else.", lang)
+        } else {
+            "Transcribe the following audio to text. Output ONLY the transcribed text, nothing else.".to_string()
+        }
+    } else {
+        "Transcribe the following audio to text. Output ONLY the transcribed text, nothing else.".to_string()
+    };
+
+    // Build request body with multimodal content (text + audio)
+    let request_body = serde_json::json!({
+        "model": provider.model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": transcription_prompt
+                },
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": audio_base64,
+                        "format": "wav"
+                    }
+                }
+            ]
+        }],
+        "max_tokens": 4096
+    });
+
+    // Create HTTP client and send request
+    let client = reqwest::Client::new();
+    info!("[Cloud Transcription - Gemini] Sending POST request...");
+    
+    let response = client
+        .post(&endpoint)
+        .header("Content-Type", "application/json")
+        .bearer_auth(&provider.api_key)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("[Cloud Transcription - Gemini] Network error: {}", e);
+            format!("Failed to send transcription request: {}", e)
+        })?;
+
+    let status = response.status();
+    info!("[Cloud Transcription - Gemini] Received response with status: {}", status);
+
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        error!(
+            "[Cloud Transcription - Gemini] API ERROR - Status: {}, Model: {}, Response: {}",
+            status, provider.model, error_text
+        );
+        return Err(format!(
+            "Gemini transcription failed ({}): {}",
+            status, error_text
+        ));
+    }
+
+    // Parse the chat completion response
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| {
+            error!("[Cloud Transcription - Gemini] Failed to read response body: {}", e);
+            format!("Failed to read response: {}", e)
+        })?;
+
+    debug!("[Cloud Transcription - Gemini] Raw response: {}", response_text);
+
+    let parsed: serde_json::Value = serde_json::from_str(&response_text)
+        .map_err(|e| {
+            error!("[Cloud Transcription - Gemini] Failed to parse JSON: {}. Raw: {}", e, response_text);
+            format!("Failed to parse response: {}", e)
+        })?;
+
+    // Extract text from chat completion response: choices[0].message.content
+    let text = parsed
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    info!(
+        "[Cloud Transcription - Gemini] SUCCESS - Transcribed {} chars",
         text.len()
     );
 
@@ -189,6 +398,7 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
     };
 
     Some(OnlineTranscriptionProvider {
+        provider_id: provider_id.clone(),
         base_url,
         model,
         api_key,

@@ -25,12 +25,12 @@ const PROVIDER_MODELS: Record<string, DropdownOption[]> = {
     groq: [
         { value: "whisper-large-v3-turbo", label: "Whisper Large v3 Turbo" },
         { value: "whisper-large-v3", label: "Whisper Large v3" },
-        { value: "distil-whisper-large-v3-en", label: "Distil Whisper Large v3 (English)" },
     ],
     gemini: [
         { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-        { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+        { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
         { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite" },
     ],
 };
 

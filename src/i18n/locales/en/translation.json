@@ -4,6 +4,7 @@
     "advanced": "Advanced",
     "postProcessing": "Post Process",
     "cloudProviders": "Cloud Providers",
+    "cloudModels": "Cloud Models",
     "providers": "Providers",
     "history": "History",
     "debug": "Debug",
@@ -293,7 +294,7 @@
     },
     "onlineProvider": {
       "toggle": {
-        "label": "Cloud Provider",
+        "label": "Use Cloud Models",
         "description": "Use cloud APIs for transcription instead of local models"
       }
     },

@@ -20,7 +20,7 @@ export const OnlineProviderToggle: React.FC<OnlineProviderToggleProps> =
                 checked={enabled}
                 onChange={(enabled) => updateSetting("use_online_provider", enabled)}
                 isUpdating={isUpdating("use_online_provider")}
-                label={t("settings.onlineProvider.toggle.label", "Cloud Provider")}
+                label={t("settings.onlineProvider.toggle.label", "Use Cloud Models")}
                 description={t("settings.onlineProvider.toggle.description", "Use cloud APIs for transcription instead of local models")}
                 descriptionMode={descriptionMode}
                 grouped={grouped}

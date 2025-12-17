@@ -128,6 +128,31 @@ const settingUpdaters: {
   // Online provider settings
   use_online_provider: (value) =>
     commands.changeUseOnlineProviderSetting(value as boolean),
+  online_provider_id: (value) =>
+    commands.changeOnlineProviderIdSetting(value as string),
+  online_provider_api_keys: (value) => {
+    // This stores the entire map, so we need to update each key
+    // The command expects providerId and apiKey separately
+    // We'll handle this specially by iterating over changed keys
+    const keys = value as Record<string, string>;
+    // Find the most recently changed key by comparing to current state
+    // For now, just update all non-empty keys
+    const promises = Object.entries(keys)
+      .filter(([, apiKey]) => apiKey !== undefined)
+      .map(([providerId, apiKey]) =>
+        commands.changeOnlineProviderApiKeySetting(providerId, apiKey)
+      );
+    return Promise.all(promises);
+  },
+  online_provider_models: (value) => {
+    const models = value as Record<string, string>;
+    const promises = Object.entries(models)
+      .filter(([, model]) => model !== undefined)
+      .map(([providerId, model]) =>
+        commands.changeOnlineProviderModelSetting(providerId, model)
+      );
+    return Promise.all(promises);
+  },
 };
 
 export const useSettingsStore = create<SettingsStore>()(
