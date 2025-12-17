@@ -1,6 +1,6 @@
 import React from "react";
 
-const HandyTextLogo = ({
+const BabblTextLogo = ({
   width,
   height,
   className,
@@ -88,4 +88,4 @@ const HandyTextLogo = ({
   );
 };
 
-export default HandyTextLogo;
+export default BabblTextLogo;
