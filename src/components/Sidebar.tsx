@@ -1,8 +1,8 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Cog, FlaskConical, History, Info, Sparkles, Cloud } from "lucide-react";
-import HandyTextLogo from "./icons/HandyTextLogo";
-import HandyHand from "./icons/HandyHand";
+// Logo image is loaded from src-tauri/icons
+import BabblIcon from "./icons/BabblIcon";
 import { useSettings } from "../hooks/useSettings";
 import {
   GeneralSettings,
@@ -34,7 +34,7 @@ interface SectionConfig {
 export const SECTIONS_CONFIG = {
   general: {
     labelKey: "sidebar.general",
-    icon: HandyHand,
+    icon: BabblIcon,
     component: GeneralSettings,
     enabled: () => true,
   },
@@ -94,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="flex flex-col w-40 h-full border-r border-mid-gray/20 items-center px-2">
-      <HandyTextLogo width={120} className="m-4" />
+      <img src="/src-tauri/icons/Babbl_extended_logo_original.png" width={120} className="m-4" alt="Babbl Logo" />
       <div className="flex flex-col w-full items-center gap-1 pt-2 border-t border-mid-gray/20">
         {availableSections.map((section) => {
           const Icon = section.icon;
