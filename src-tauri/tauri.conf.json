@@ -39,8 +39,10 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
-    "targets": "all",
+    "createUpdaterArtifacts": false,
+    "targets": [
+      "nsis"
+    ],
     "resources": [
       "resources/**/*"
     ],

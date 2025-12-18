@@ -494,7 +494,19 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
     vec![LLMPrompt {
         id: "default_improve_transcriptions".to_string(),
         name: "Improve Transcriptions".to_string(),
-        prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
+        prompt: "Clean this transcript following these rules:
+                    1. Fix spelling, capitalization, and punctuation
+                    2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)
+                    3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)
+                    4. Remove filler words (um, uh, like)
+                    5. Keep the original language
+                    6. Format with bullet points or segments where appropriate
+                    7. Preserve exact meaning and word order—do not paraphrase or reorder
+
+                    Return only the cleaned transcript.  No explanations, titles, or preamble. 
+
+                    Transcript:
+                    ${output}".to_string(),
     }]
 }
 
