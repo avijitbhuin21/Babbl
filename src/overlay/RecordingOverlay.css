@@ -5,11 +5,12 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   padding: 6px;
-  background: #000000cc;
+  background: #1B211Add;
   border-radius: 18px;
   opacity: 0;
   transition: opacity 300ms ease-out;
   box-sizing: border-box;
+  border: 1px solid #8BAE6633;
 }
 
 .overlay-left {
@@ -29,6 +30,12 @@
   justify-content: flex-end;
 }
 
+.overlay-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 .bars-container {
   display: flex;
   align-items: end;
@@ -41,7 +48,7 @@
 
 .bar {
   width: 6px;
-  background: #ffe5ee;
+  background: #8BAE66;
   max-height: 20px;
   border-radius: 2px;
   transition: height 80ms linear;
@@ -53,7 +60,7 @@
 }
 
 .transcribing-text {
-  color: white;
+  color: #8BAE66;
   font-size: 12px;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -61,10 +68,12 @@
 }
 
 @keyframes transcribing-pulse {
+
   0%,
   100% {
     opacity: 0.6;
   }
+
   50% {
     opacity: 1;
   }
@@ -86,10 +95,14 @@
 }
 
 .cancel-button:hover {
-  background: #faa2ca33;
+  background: #8BAE6633;
   transform: scale(1.05);
 }
 
 .cancel-button:active {
   transform: scale(0.95);
+}
+
+.cancel-button svg g {
+  fill: #8BAE66;
 }

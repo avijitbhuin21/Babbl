@@ -61,14 +61,31 @@ pub fn change_tray_icon(app: &AppHandle, icon: TrayIconState) {
 
     let icon_path = get_icon_path(theme, icon.clone());
 
-    let _ = tray.set_icon(Some(
-        Image::from_path(
-            app.path()
-                .resolve(icon_path, tauri::path::BaseDirectory::Resource)
-                .expect("failed to resolve"),
-        )
-        .expect("failed to set icon"),
-    ));
+    // Use proper error handling to avoid panicking in callback contexts
+    match app
+        .path()
+        .resolve(icon_path, tauri::path::BaseDirectory::Resource)
+    {
+        Ok(resolved_path) => {
+            match Image::from_path(&resolved_path) {
+                Ok(image) => {
+                    if let Err(e) = tray.set_icon(Some(image)) {
+                        log::warn!("Failed to set tray icon: {}", e);
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to load tray icon from {:?}: {}",
+                        resolved_path,
+                        e
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to resolve tray icon path '{}': {}", icon_path, e);
+        }
+    }
 
     // Update menu based on state
     update_tray_menu(app, &icon);

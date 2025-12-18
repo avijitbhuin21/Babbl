@@ -1,14 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  MicrophoneIcon,
-  TranscriptionIcon,
-  CancelIcon,
-} from "../components/icons";
+import { CancelIcon } from "../components/icons";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import { syncLanguageFromSettings } from "@/i18n";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { resolveResource } from "@tauri-apps/api/path";
 
 type OverlayState = "recording" | "transcribing";
 
@@ -18,6 +16,23 @@ const RecordingOverlay: React.FC = () => {
   const [state, setState] = useState<OverlayState>("recording");
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
+  const [recordingIconSrc, setRecordingIconSrc] = useState<string>("");
+  const [transcribingIconSrc, setTranscribingIconSrc] = useState<string>("");
+
+  // Load icon paths on mount
+  useEffect(() => {
+    const loadIcons = async () => {
+      try {
+        const recordingPath = await resolveResource("resources/recording.png");
+        const transcribingPath = await resolveResource("resources/transcribing.png");
+        setRecordingIconSrc(convertFileSrc(recordingPath));
+        setTranscribingIconSrc(convertFileSrc(transcribingPath));
+      } catch (e) {
+        console.error("Failed to load overlay icons:", e);
+      }
+    };
+    loadIcons();
+  }, []);
 
   useEffect(() => {
     const setupEventListeners = async () => {
@@ -61,11 +76,9 @@ const RecordingOverlay: React.FC = () => {
   }, []);
 
   const getIcon = () => {
-    if (state === "recording") {
-      return <MicrophoneIcon />;
-    } else {
-      return <TranscriptionIcon />;
-    }
+    const iconSrc = state === "recording" ? recordingIconSrc : transcribingIconSrc;
+    if (!iconSrc) return null;
+    return <img src={iconSrc} alt={state} className="overlay-icon" />;
   };
 
   return (
@@ -101,7 +114,7 @@ const RecordingOverlay: React.FC = () => {
               commands.cancelOperation();
             }}
           >
-            <CancelIcon />
+            <CancelIcon color="#8BAE66" />
           </div>
         )}
       </div>
