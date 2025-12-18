@@ -1,4 +1,5 @@
 import React from "react";
+import trayIcon from "../../assets/tray_idle.png";
 
 interface BabblIconProps {
     width?: number | string;
@@ -9,7 +10,7 @@ interface BabblIconProps {
 const BabblIcon: React.FC<BabblIconProps> = ({ width = 24, height = 24, className }) => {
     return (
         <img
-            src="/src-tauri/resources/tray_idle.png"
+            src={trayIcon}
             width={width}
             height={height}
             className={className}

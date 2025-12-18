@@ -29,3 +29,6 @@ recording_*
 .crush/
 
 TODO.md
+
+# Signing keys - NEVER COMMIT
+.keys/

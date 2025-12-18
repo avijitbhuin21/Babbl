@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Cog, FlaskConical, History, Info, Sparkles, Cloud } from "lucide-react";
-// Logo image is loaded from src-tauri/icons
+import babblExtendedLogo from "../assets/Babbl_extended_logo_original.png";
 import BabblIcon from "./icons/BabblIcon";
 import { useSettings } from "../hooks/useSettings";
 import {
@@ -94,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="flex flex-col w-44 h-full bg-surface/30 items-center py-4 px-3">
-      <img src="/src-tauri/icons/Babbl_extended_logo_original.png" width={100} className="mb-6 opacity-90" alt="Babbl Logo" />
+      <img src={babblExtendedLogo} width={100} className="mb-6 opacity-90" alt="Babbl Logo" />
       <div className="flex flex-col w-full items-start gap-0.5">
         {availableSections.map((section) => {
           const Icon = section.icon;
