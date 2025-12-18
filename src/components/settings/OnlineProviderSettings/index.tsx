@@ -92,7 +92,7 @@ export const OnlineProviderSettings: React.FC = () => {
     const isModelUpdating = isUpdating("online_provider_models");
 
     return (
-        <div className="max-w-3xl w-full mx-auto space-y-6">
+        <div className="w-full space-y-8">
             <SettingsGroup title={t("settings.onlineProviders.title", "Online Providers")}>
                 {/* Provider Selection */}
                 <SettingContainer

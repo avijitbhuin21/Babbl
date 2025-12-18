@@ -23,8 +23,10 @@ export const TranslateToEnglish: React.FC<TranslateToEnglishProps> = React.memo(
     const { currentModel, loadCurrentModel, models } = useModels();
 
     const translateToEnglish = getSetting("translate_to_english") || false;
+    const useOnlineProvider = getSetting("use_online_provider") || false;
+    // Translation is supported when using online providers, regardless of local model
     const isDisabledTranslation =
-      unsupportedTranslationModels.includes(currentModel);
+      !useOnlineProvider && unsupportedTranslationModels.includes(currentModel);
 
     const description = useMemo(() => {
       if (isDisabledTranslation) {

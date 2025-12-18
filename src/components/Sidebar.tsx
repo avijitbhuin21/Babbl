@@ -93,9 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <div className="flex flex-col w-40 h-full border-r border-mid-gray/20 items-center px-2">
-      <img src="/src-tauri/icons/Babbl_extended_logo_original.png" width={120} className="m-4" alt="Babbl Logo" />
-      <div className="flex flex-col w-full items-center gap-1 pt-2 border-t border-mid-gray/20">
+    <div className="flex flex-col w-44 h-full bg-surface/30 items-center py-4 px-3">
+      <img src="/src-tauri/icons/Babbl_extended_logo_original.png" width={100} className="mb-6 opacity-90" alt="Babbl Logo" />
+      <div className="flex flex-col w-full items-start gap-0.5">
         {availableSections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
@@ -103,19 +103,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <div
               key={section.id}
-              className={`flex gap-2 items-center p-2 w-full rounded-lg cursor-pointer transition-all duration-200 ${isActive
-                ? "bg-background-ui/25 text-text shadow-sm"
-                : "hover:bg-background-ui/10 hover:opacity-100 opacity-75"
+              className={`flex gap-3 items-center py-2.5 px-3 w-full rounded-md cursor-pointer transition-all duration-150 ${isActive
+                ? "bg-background-ui/20 text-background-ui"
+                : "text-text/60 hover:text-text/90 hover:bg-white/5"
                 }`}
               onClick={() => onSectionChange(section.id)}
             >
-              <Icon width={24} height={24} className="shrink-0" />
-              <p
-                className="text-sm font-medium truncate"
-                title={t(section.labelKey)}
-              >
-                {t(section.labelKey)}
-              </p>
+              <Icon width={18} height={18} className="shrink-0" />
+              <span className="text-sm font-medium">{t(section.labelKey)}</span>
             </div>
           );
         })}

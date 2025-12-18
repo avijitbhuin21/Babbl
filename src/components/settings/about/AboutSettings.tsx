@@ -35,7 +35,7 @@ export const AboutSettings: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl w-full mx-auto space-y-6">
+    <div className="w-full space-y-8">
       <SettingsGroup title={t("settings.about.title")}>
         <AppLanguageSelector descriptionMode="tooltip" grouped={true} />
         <SettingContainer
@@ -63,15 +63,18 @@ export const AboutSettings: React.FC = () => {
           </Button>
         </SettingContainer>
 
-        <SettingContainer
-          title={t("settings.about.supportDevelopment.title")}
-          description={t("settings.about.supportDevelopment.description")}
-          grouped={true}
-        >
-          <Button variant="primary" size="md" onClick={handleDonateClick}>
-            {t("settings.about.supportDevelopment.button")}
-          </Button>
-        </SettingContainer>
+        {/* Hidden for now - can be re-enabled later */}
+        {false && (
+          <SettingContainer
+            title={t("settings.about.supportDevelopment.title")}
+            description={t("settings.about.supportDevelopment.description")}
+            grouped={true}
+          >
+            <Button variant="primary" size="md" onClick={handleDonateClick}>
+              {t("settings.about.supportDevelopment.button")}
+            </Button>
+          </SettingContainer>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.about.acknowledgments.title")}>

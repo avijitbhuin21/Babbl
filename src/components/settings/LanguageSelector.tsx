@@ -27,7 +27,9 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedLanguage = getSetting("selected_language") || "auto";
-  const isUnsupported = unsupportedModels.includes(currentModel);
+  const useOnlineProvider = getSetting("use_online_provider") || false;
+  // Language selection is supported when using online providers, regardless of local model
+  const isUnsupported = !useOnlineProvider && unsupportedModels.includes(currentModel);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

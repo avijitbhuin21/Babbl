@@ -121,7 +121,7 @@ export const HistorySettings: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="max-w-3xl w-full mx-auto space-y-6">
+      <div className="w-full space-y-8">
         <div className="space-y-2">
           <div className="px-4 flex items-center justify-between">
             <div>
@@ -146,7 +146,7 @@ export const HistorySettings: React.FC = () => {
 
   if (historyEntries.length === 0) {
     return (
-      <div className="max-w-3xl w-full mx-auto space-y-6">
+      <div className="w-full space-y-8">
         <div className="space-y-2">
           <div className="px-4 flex items-center justify-between">
             <div>
@@ -170,7 +170,7 @@ export const HistorySettings: React.FC = () => {
   }
 
   return (
-    <div className="max-w-3xl w-full mx-auto space-y-6">
+    <div className="w-full space-y-8">
       <div className="space-y-2">
         <div className="px-4 flex items-center justify-between">
           <div>

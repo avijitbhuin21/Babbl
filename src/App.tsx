@@ -74,18 +74,18 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-background">
       <Toaster />
-      {/* Main content area that takes remaining space */}
+      {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           activeSection={currentSection}
           onSectionChange={setCurrentSection}
         />
-        {/* Scrollable content area */}
+        {/* Scrollable content area with more breathing room */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col items-center p-4 gap-4">
+            <div className="flex flex-col items-center py-8 px-6 gap-6 max-w-4xl mx-auto">
               <AccessibilityPermissions />
               {renderSettingsContent(currentSection)}
             </div>

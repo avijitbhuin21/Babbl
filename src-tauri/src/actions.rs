@@ -39,10 +39,11 @@ async fn transcribe_online(
     provider: OnlineTranscriptionProvider,
     audio_samples: Vec<f32>,
     language: Option<String>,
+    translate_to_english: bool,
 ) -> Result<String, String> {
     // Use different API flow for Gemini (chat completions with audio)
     if provider.provider_id == "gemini" {
-        return transcribe_online_gemini(provider, audio_samples, language).await;
+        return transcribe_online_gemini(provider, audio_samples, language, translate_to_english).await;
     }
     
     // Standard OpenAI-compatible /audio/transcriptions flow for OpenAI and Groq
@@ -100,10 +101,19 @@ async fn transcribe_online(
         audio_samples.len() as f32 / 16000.0
     );
 
-    // Build the transcription endpoint URL
+    // Build the transcription/translation endpoint URL
+    // The /audio/translations endpoint only works with Whisper models (whisper-1)
+    // For other models (gpt-4o-transcribe, etc.), we use transcriptions with a prompt
     let base_url = provider.base_url.trim_end_matches('/');
-    let endpoint = format!("{}/audio/transcriptions", base_url);
-    info!("[Cloud Transcription] Sending request to: {}", endpoint);
+    let is_whisper_model = provider.model.to_lowercase().contains("whisper");
+    let use_translations_endpoint = translate_to_english && is_whisper_model;
+    
+    let endpoint = if use_translations_endpoint {
+        format!("{}/audio/translations", base_url)
+    } else {
+        format!("{}/audio/transcriptions", base_url)
+    };
+    info!("[Cloud Transcription] Sending request to: {} (translate: {}, whisper: {})", endpoint, translate_to_english, is_whisper_model);
 
     // Create multipart form
     let form = reqwest::multipart::Form::new()
@@ -119,14 +129,26 @@ async fn transcribe_online(
                 })?,
         );
 
-    // Add language if specified and not "auto"
-    let form = if let Some(ref lang) = language {
-        if lang != "auto" {
-            info!("[Cloud Transcription] Using language: {}", lang);
-            form.text("language", lang.clone())
+    // Add language if specified and not "auto" (not used for translations endpoint)
+    let form = if !use_translations_endpoint {
+        if let Some(ref lang) = language {
+            if lang != "auto" {
+                info!("[Cloud Transcription] Using language: {}", lang);
+                form.text("language", lang.clone())
+            } else {
+                form
+            }
         } else {
             form
         }
+    } else {
+        form
+    };
+
+    // For non-Whisper models with translation enabled, add a prompt
+    let form = if translate_to_english && !is_whisper_model {
+        info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
+        form.text("prompt", "Please transcribe this audio and translate it to English.")
     } else {
         form
     };
@@ -200,6 +222,7 @@ async fn transcribe_online_gemini(
     provider: OnlineTranscriptionProvider,
     audio_samples: Vec<f32>,
     language: Option<String>,
+    translate_to_english: bool,
 ) -> Result<String, String> {
     use hound::{WavSpec, WavWriter};
     use std::io::Cursor;
@@ -252,8 +275,18 @@ async fn transcribe_online_gemini(
     let endpoint = format!("{}/chat/completions", base_url);
     info!("[Cloud Transcription - Gemini] Sending request to: {}", endpoint);
 
-    // Build transcription prompt
-    let transcription_prompt = if let Some(ref lang) = language {
+    // Build transcription prompt with optional translation
+    let transcription_prompt = if translate_to_english {
+        if let Some(ref lang) = language {
+            if lang != "auto" {
+                format!("Transcribe the following audio and translate it to English. The audio is in {}. Output ONLY the translated English text, nothing else.", lang)
+            } else {
+                "Transcribe the following audio and translate it to English. Output ONLY the translated English text, nothing else.".to_string()
+            }
+        } else {
+            "Transcribe the following audio and translate it to English. Output ONLY the translated English text, nothing else.".to_string()
+        }
+    } else if let Some(ref lang) = language {
         if lang != "auto" {
             format!("Transcribe the following audio to text. The audio is in {}. Output ONLY the transcribed text, nothing else.", lang)
         } else {
@@ -722,7 +755,8 @@ impl ShortcutAction for TranscribeAction {
                         } else {
                             Some(settings.selected_language.clone())
                         };
-                        transcribe_online(provider, samples, language)
+                        let translate = settings.translate_to_english;
+                        transcribe_online(provider, samples, language, translate)
                             .await
                             .map_err(|e| format!("Online transcription failed: {}", e))
                     } else {

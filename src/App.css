@@ -14,10 +14,11 @@
 }
 
 :root {
-  /* Typography */
-  font-size: 15px;
-  line-height: 24px;
+  /* Typography - slightly smaller for cleaner look */
+  font-size: 14px;
+  line-height: 1.6;
   font-weight: 400;
+  letter-spacing: -0.01em;
 
   /* Typography settings */
   font-synthesis: none;
