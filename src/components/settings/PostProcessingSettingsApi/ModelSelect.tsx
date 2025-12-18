@@ -72,7 +72,7 @@ export const ModelSelect: React.FC<ModelSelectProps> = React.memo(
           type="button"
           onClick={handleRefreshClick}
           disabled={isRefreshing || disabled}
-          className="p-2 mr-1 text-text/50 hover:text-logo-primary transition-colors disabled:opacity-50"
+          className="p-2 mr-1 text-text/50 hover:text-background-ui transition-colors disabled:opacity-50"
           title="Refresh models"
         >
           <RefreshCcw

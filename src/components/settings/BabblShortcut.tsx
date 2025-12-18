@@ -404,13 +404,13 @@ export const BabblShortcut: React.FC<BabblShortcutProps> = ({
         {editingShortcutId === shortcutId ? (
           <div
             ref={(ref) => setShortcutRef(shortcutId, ref)}
-            className="px-2 py-1 text-sm font-semibold border border-logo-primary bg-logo-primary/30 rounded min-w-[120px] text-center"
+            className="px-2 py-1 text-sm font-semibold border border-background-ui bg-background-ui/30 rounded min-w-[120px] text-center"
           >
             {formatCurrentKeys()}
           </div>
         ) : (
           <div
-            className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded cursor-pointer hover:border-logo-primary"
+            className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-background-ui/10 rounded cursor-pointer hover:border-background-ui"
             onClick={() => startRecording(shortcutId)}
           >
             {binding.current_binding

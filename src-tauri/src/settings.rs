@@ -223,7 +223,7 @@ impl SoundTheme {
     }
 }
 
-/* still handy for composing the initial JSON in the store ------------- */
+/* still Babbl for composing the initial JSON in the store ------------- */
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct AppSettings {
     pub bindings: HashMap<String, ShortcutBinding>,

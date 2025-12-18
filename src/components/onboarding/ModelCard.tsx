@@ -32,11 +32,11 @@ const ModelCard: React.FC<ModelCardProps> = ({
   const displayDescription = getTranslatedModelDescription(model, t);
 
   const baseButtonClasses =
-    "flex justify-between items-center rounded-xl p-3 px-4 text-left transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-logo-primary/25 active:scale-[0.98] cursor-pointer group";
+    "flex justify-between items-center rounded-xl p-3 px-4 text-left transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-background-ui/30 active:scale-[0.98] cursor-pointer group";
 
   const variantClasses = isFeatured
-    ? "border-2 border-logo-primary/25 bg-logo-primary/5 hover:border-logo-primary/40 hover:bg-logo-primary/8 hover:shadow-lg hover:scale-[1.02] disabled:hover:border-logo-primary/25 disabled:hover:bg-logo-primary/5 disabled:hover:shadow-none disabled:hover:scale-100"
-    : "border-2 border-mid-gray/20 hover:border-logo-primary/50 hover:bg-logo-primary/5 hover:shadow-lg hover:scale-[1.02] disabled:hover:border-mid-gray/20 disabled:hover:bg-transparent disabled:hover:shadow-none disabled:hover:scale-100";
+    ? "border-2 border-background-ui/30 bg-background-ui/8 hover:border-background-ui/50 hover:bg-background-ui/12 hover:shadow-md hover:scale-[1.01] disabled:hover:border-background-ui/30 disabled:hover:bg-background-ui/8 disabled:hover:shadow-none disabled:hover:scale-100"
+    : "border-2 border-border/60 hover:border-background-ui/50 hover:bg-background-ui/8 hover:shadow-md hover:scale-[1.01] disabled:hover:border-border/60 disabled:hover:bg-transparent disabled:hover:shadow-none disabled:hover:scale-100";
 
   return (
     <button
@@ -49,7 +49,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
     >
       <div className="flex flex-col items-ce">
         <div className="flex items-center gap-4">
-          <h3 className="text-lg font-semibold text-text group-hover:text-logo-primary transition-colors">
+          <h3 className="text-lg font-semibold text-text group-hover:text-background-ui transition-colors">
             {displayName}
           </h3>
           <DownloadSize sizeMb={Number(model.size_mb)} />
@@ -69,7 +69,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
           </p>
           <div className="w-20 h-2 bg-mid-gray/20 rounded-full overflow-hidden">
             <div
-              className="h-full bg-logo-primary rounded-full transition-all duration-300"
+              className="h-full bg-background-ui rounded-full transition-all duration-300"
               style={{ width: `${model.accuracy_score * 100}%` }}
             />
           </div>
@@ -80,7 +80,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
           </p>
           <div className="w-20 h-2 bg-mid-gray/20 rounded-full overflow-hidden">
             <div
-              className="h-full bg-logo-primary rounded-full transition-all duration-300"
+              className="h-full bg-background-ui rounded-full transition-all duration-300"
               style={{ width: `${model.speed_score * 100}%` }}
             />
           </div>

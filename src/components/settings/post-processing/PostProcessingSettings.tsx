@@ -331,7 +331,7 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
               <div
                 key={prompt.id}
                 className={`p-3 rounded-lg border transition-all duration-150 ${isActive
-                  ? "border-logo-primary/50 bg-logo-primary/5"
+                  ? "border-background-ui/50 bg-background-ui/5"
                   : "border-mid-gray/20 bg-mid-gray/5 hover:border-mid-gray/40"
                   }`}
               >
@@ -343,7 +343,7 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
                         {prompt.name}
                       </h4>
                       {isActive && (
-                        <span className="px-1.5 py-0.5 text-xs font-medium bg-logo-primary/20 text-logo-primary rounded">
+                        <span className="px-1.5 py-0.5 text-xs font-medium bg-background-ui/20 text-background-ui rounded">
                           {t("settings.postProcessing.prompts.active")}
                         </span>
                       )}
@@ -383,8 +383,8 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
                         isActive || isUpdating("post_process_selected_prompt_id")
                       }
                       className={`p-1.5 rounded-lg transition-colors duration-150 cursor-pointer ${isActive
-                        ? "text-logo-primary"
-                        : "hover:bg-mid-gray/20 text-mid-gray hover:text-logo-primary"
+                        ? "text-background-ui"
+                        : "hover:bg-mid-gray/20 text-mid-gray hover:text-background-ui"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       title={
                         isActive

@@ -69,8 +69,8 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
     <div className="absolute bottom-full left-0 mb-2 w-64 bg-background border border-mid-gray/20 rounded-lg shadow-lg py-2 z-50">
       {/* First Run Welcome */}
       {isFirstRun && (
-        <div className="px-3 py-2 bg-logo-primary/10 border-b border-logo-primary/20">
-          <div className="text-xs font-medium text-logo-primary mb-1">
+        <div className="px-3 py-2 bg-background-ui/10 border-b border-background-ui/20">
+          <div className="text-xs font-medium text-background-ui mb-1">
             {t("modelSelector.welcome")}
           </div>
           <div className="text-xs text-text/70">
@@ -97,11 +97,10 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
               }}
               tabIndex={0}
               role="button"
-              className={`w-full px-3 py-2 text-left hover:bg-mid-gray/10 transition-colors cursor-pointer focus:outline-none ${
-                currentModelId === model.id
-                  ? "bg-logo-primary/10 text-logo-primary"
+              className={`w-full px-3 py-2 text-left hover:bg-mid-gray/10 transition-colors cursor-pointer focus:outline-none ${currentModelId === model.id
+                  ? "bg-background-ui/10 text-background-ui"
                   : ""
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -114,7 +113,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   {currentModelId === model.id && (
-                    <div className="text-xs text-logo-primary">
+                    <div className="text-xs text-background-ui">
                       {t("modelSelector.active")}
                     </div>
                   )}
@@ -174,18 +173,17 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                 tabIndex={0}
                 role="button"
                 aria-disabled={isDownloading}
-                className={`w-full px-3 py-2 text-left hover:bg-mid-gray/10 transition-colors cursor-pointer focus:outline-none ${
-                  isDownloading
+                className={`w-full px-3 py-2 text-left hover:bg-mid-gray/10 transition-colors cursor-pointer focus:outline-none ${isDownloading
                     ? "opacity-50 cursor-not-allowed hover:bg-transparent"
                     : ""
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm">
                       {getTranslatedModelName(model, t)}
                       {model.id === "parakeet-tdt-0.6b-v3" && isFirstRun && (
-                        <span className="ml-2 text-xs bg-logo-primary/20 text-logo-primary px-1.5 py-0.5 rounded">
+                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded">
                           {t("onboarding.recommended")}
                         </span>
                       )}
@@ -198,7 +196,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                       {formatModelSize(Number(model.size_mb))}
                     </div>
                   </div>
-                  <div className="text-xs text-logo-primary tabular-nums">
+                  <div className="text-xs text-background-ui tabular-nums">
                     {isDownloading && progress
                       ? `${Math.max(0, Math.min(100, Math.round(progress.percentage)))}%`
                       : t("modelSelector.download")}

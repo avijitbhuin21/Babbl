@@ -37,7 +37,7 @@ export const ApiKeyField: React.FC<ApiKeyFieldProps> = React.memo(
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
-          className="absolute right-2 p-1 text-text/50 hover:text-logo-primary transition-colors"
+          className="absolute right-2 p-1 text-text/50 hover:text-background-ui transition-colors"
           title={showPassword ? "Hide API key" : "Show API key"}
         >
           {showPassword ? (

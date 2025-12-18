@@ -74,7 +74,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const selectedLanguageName = isUnsupported
     ? t("settings.general.language.auto")
     : LANGUAGES.find((lang) => lang.value === selectedLanguage)?.label ||
-      t("settings.general.language.auto");
+    t("settings.general.language.auto");
 
   const handleLanguageSelect = async (languageCode: string) => {
     await updateSetting("selected_language", languageCode);
@@ -121,19 +121,17 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
-            className={`px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 rounded min-w-[200px] text-left flex items-center justify-between transition-all duration-150 ${
-              isUpdating("selected_language") || isUnsupported
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-logo-primary/10 cursor-pointer hover:border-logo-primary"
-            }`}
+            className={`px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 rounded min-w-[200px] text-left flex items-center justify-between transition-all duration-150 ${isUpdating("selected_language") || isUnsupported
+              ? "opacity-50 cursor-not-allowed"
+              : "hover:bg-background-ui/10 cursor-pointer hover:border-background-ui"
+              }`}
             onClick={handleToggle}
             disabled={isUpdating("selected_language") || isUnsupported}
           >
             <span className="truncate">{selectedLanguageName}</span>
             <svg
-              className={`w-4 h-4 ml-2 transition-transform duration-200 ${
-                isOpen ? "transform rotate-180" : ""
-              }`}
+              className={`w-4 h-4 ml-2 transition-transform duration-200 ${isOpen ? "transform rotate-180" : ""
+                }`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -158,7 +156,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                   onChange={handleSearchChange}
                   onKeyDown={handleKeyDown}
                   placeholder={t("settings.general.language.searchPlaceholder")}
-                  className="w-full px-2 py-1 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded focus:outline-none focus:ring-1 focus:ring-logo-primary focus:border-logo-primary"
+                  className="w-full px-2 py-1 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded focus:outline-none focus:ring-1 focus:ring-background-ui focus:border-background-ui"
                 />
               </div>
 
@@ -172,11 +170,10 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                     <button
                       key={language.value}
                       type="button"
-                      className={`w-full px-2 py-1 text-sm text-left hover:bg-logo-primary/10 transition-colors duration-150 ${
-                        selectedLanguage === language.value
-                          ? "bg-logo-primary/20 text-logo-primary font-semibold"
-                          : ""
-                      }`}
+                      className={`w-full px-2 py-1 text-sm text-left hover:bg-background-ui/10 transition-colors duration-150 ${selectedLanguage === language.value
+                        ? "bg-background-ui/20 text-background-ui font-semibold"
+                        : ""
+                        }`}
                       onClick={() => handleLanguageSelect(language.value)}
                     >
                       <div className="flex items-center justify-between">
@@ -196,7 +193,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       </div>
       {isUpdating("selected_language") && (
         <div className="absolute inset-0 bg-mid-gray/10 rounded flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-logo-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-4 h-4 border-2 border-background-ui border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
     </SettingContainer>

@@ -151,7 +151,7 @@ export const OnlineProviderSettings: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-2 p-1 text-text/50 hover:text-logo-primary transition-colors"
+                            className="absolute right-2 p-1 text-text/50 hover:text-background-ui transition-colors"
                             title={showApiKey ? "Hide API key" : "Show API key"}
                         >
                             {showApiKey ? (

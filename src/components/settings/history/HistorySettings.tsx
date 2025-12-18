@@ -266,8 +266,8 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           <button
             onClick={onToggleSaved}
             className={`p-2 rounded transition-colors cursor-pointer ${entry.saved
-              ? "text-logo-primary hover:text-logo-primary/80"
-              : "text-text/50 hover:text-logo-primary"
+              ? "text-background-ui hover:text-background-ui/80"
+              : "text-text/50 hover:text-background-ui"
               }`}
             title={
               entry.saved
@@ -283,7 +283,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </button>
           <button
             onClick={handleDeleteEntry}
-            className="text-text/50 hover:text-logo-primary transition-colors cursor-pointer"
+            className="text-text/50 hover:text-background-ui transition-colors cursor-pointer"
             title={t("settings.history.delete")}
           >
             <Trash2 width={16} height={16} />
@@ -304,7 +304,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </div>
           <button
             onClick={handleCopyRawText}
-            className="text-text/50 hover:text-logo-primary hover:border-logo-primary transition-colors cursor-pointer flex-shrink-0"
+            className="text-text/50 hover:text-background-ui hover:border-background-ui transition-colors cursor-pointer flex-shrink-0"
             title={t("settings.history.copyToClipboard")}
           >
             {showCopiedRaw ? (
@@ -318,10 +318,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
 
       {/* Post-Processed Section (only shown if there's post-processed text) */}
       {hasPostProcessedText && (
-        <div className="border border-logo-primary/30 rounded-lg p-3 bg-logo-primary/5">
+        <div className="border border-background-ui/35 rounded-lg p-3 bg-background-ui/8">
           <div className="flex justify-between items-start gap-2">
             <div className="flex-1">
-              <p className="text-xs font-medium text-logo-primary uppercase tracking-wide mb-1">
+              <p className="text-xs font-medium text-background-ui uppercase tracking-wide mb-1">
                 {t("settings.history.postProcessedOutput", "Post-Processed Output")}
               </p>
               <p className="text-text/90 text-sm">
@@ -330,7 +330,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
             </div>
             <button
               onClick={handleCopyPostProcessedText}
-              className="text-text/50 hover:text-logo-primary hover:border-logo-primary transition-colors cursor-pointer flex-shrink-0"
+              className="text-text/50 hover:text-background-ui hover:border-background-ui transition-colors cursor-pointer flex-shrink-0"
               title={t("settings.history.copyToClipboard")}
             >
               {showCopiedProcessed ? (
