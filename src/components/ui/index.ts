@@ -6,3 +6,4 @@ export { SettingsGroup } from "./SettingsGroup";
 export { TextDisplay } from "./TextDisplay";
 export { Textarea } from "./Textarea";
 export { Modal } from "./Modal";
+export { TooltipIcon } from "./TooltipIcon";

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { TooltipIcon } from "./TooltipIcon";
 
 interface SettingContainerProps {
   title: string;
@@ -67,28 +68,14 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
               onMouseLeave={() => setShowTooltip(false)}
               onClick={toggleTooltip}
             >
-              <svg
-                className="w-4 h-4 text-mid-gray cursor-help hover:text-background-ui transition-colors duration-200 select-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-label="More information"
-                role="button"
-                tabIndex={0}
+              <TooltipIcon
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     toggleTooltip();
                   }
                 }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+              />
               {showTooltip && (
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-background border border-mid-gray/80 rounded-lg shadow-lg z-[100] max-w-xs min-w-[200px] whitespace-normal animate-in fade-in-0 zoom-in-95 duration-200">
                   <p className="text-sm text-center leading-relaxed">
@@ -141,28 +128,14 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
               onMouseLeave={() => setShowTooltip(false)}
               onClick={toggleTooltip}
             >
-              <svg
-                className="w-4 h-4 text-mid-gray cursor-help hover:text-background-ui transition-colors duration-200 select-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-label="More information"
-                role="button"
-                tabIndex={0}
+              <TooltipIcon
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     toggleTooltip();
                   }
                 }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+              />
               {showTooltip && (
                 <div
                   className={`absolute ${tooltipPosition === "top" ? "bottom-full" : "top-[150%]"} left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-background border border-mid-gray/80 rounded-lg shadow-lg z-[100] max-w-xs min-w-[200px] whitespace-normal animate-in fade-in-0 zoom-in-95 duration-200`}

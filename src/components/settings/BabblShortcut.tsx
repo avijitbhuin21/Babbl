@@ -327,7 +327,6 @@ export const BabblShortcut: React.FC<BabblShortcutProps> = ({
     return formattedKeys.join(" + ");
   };
 
-
   // Store references to shortcut elements
   const setShortcutRef = (id: string, ref: HTMLDivElement | null) => {
     shortcutRefs.current.set(id, ref);

@@ -852,7 +852,6 @@ pub fn resume_binding(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-
 pub fn register_cancel_shortcut(app: &AppHandle) {
     // Cancel shortcut is disabled on Linux due to instability with dynamic shortcut registration
     #[cfg(target_os = "linux")]
@@ -991,7 +990,6 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
 
     Ok(())
 }
-
 
 pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<(), String> {
     // Check if this shortcut contains mouse buttons

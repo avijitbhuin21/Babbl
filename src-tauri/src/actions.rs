@@ -34,6 +34,38 @@ struct OnlineTranscriptionProvider {
     api_key: String,
 }
 
+/// Convert f32 audio samples to WAV format in memory
+/// Shared by both OpenAI-compatible and Gemini transcription flows
+fn convert_samples_to_wav(audio_samples: &[f32]) -> Result<Vec<u8>, String> {
+    use hound::{WavSpec, WavWriter};
+    use std::io::Cursor;
+
+    let spec = WavSpec {
+        channels: 1,
+        sample_rate: 16000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut buffer = Cursor::new(Vec::new());
+    {
+        let mut writer = WavWriter::new(&mut buffer, spec)
+            .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
+
+        for sample in audio_samples {
+            let i16_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
+            writer
+                .write_sample(i16_sample)
+                .map_err(|e| format!("Failed to write sample: {}", e))?;
+        }
+        writer
+            .finalize()
+            .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+    }
+
+    Ok(buffer.into_inner())
+}
+
 /// Transcribe audio using an online provider (OpenAI, Groq, Gemini)
 async fn transcribe_online(
     provider: OnlineTranscriptionProvider,
@@ -47,8 +79,6 @@ async fn transcribe_online(
     }
     
     // Standard OpenAI-compatible /audio/transcriptions flow for OpenAI and Groq
-    use hound::{WavSpec, WavWriter};
-    use std::io::Cursor;
     use log::info;
 
     info!(
@@ -61,41 +91,12 @@ async fn transcribe_online(
         provider.api_key.len()
     );
 
-    // Convert f32 samples to WAV format in memory
-    let spec = WavSpec {
-        channels: 1,
-        sample_rate: 16000,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
+    // Convert samples to WAV format
+    let wav_data = convert_samples_to_wav(&audio_samples).map_err(|e| {
+        error!("[Cloud Transcription] {}", e);
+        e
+    })?;
 
-    let mut buffer = Cursor::new(Vec::new());
-    {
-        let mut writer = WavWriter::new(&mut buffer, spec)
-            .map_err(|e| {
-                error!("[Cloud Transcription] Failed to create WAV writer: {}", e);
-                format!("Failed to create WAV writer: {}", e)
-            })?;
-
-        for sample in &audio_samples {
-            // Convert f32 [-1.0, 1.0] to i16
-            let i16_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-            writer
-                .write_sample(i16_sample)
-                .map_err(|e| {
-                    error!("[Cloud Transcription] Failed to write sample: {}", e);
-                    format!("Failed to write sample: {}", e)
-                })?;
-        }
-        writer
-            .finalize()
-            .map_err(|e| {
-                error!("[Cloud Transcription] Failed to finalize WAV: {}", e);
-                format!("Failed to finalize WAV: {}", e)
-            })?;
-    }
-
-    let wav_data = buffer.into_inner();
     info!("[Cloud Transcription] Created WAV data: {} bytes ({:.1}s of audio)", 
         wav_data.len(), 
         audio_samples.len() as f32 / 16000.0
@@ -233,8 +234,6 @@ async fn transcribe_online_gemini(
     language: Option<String>,
     translate_to_english: bool,
 ) -> Result<String, String> {
-    use hound::{WavSpec, WavWriter};
-    use std::io::Cursor;
     use log::info;
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
@@ -243,36 +242,12 @@ async fn transcribe_online_gemini(
         provider.model
     );
 
-    // Convert f32 samples to WAV format in memory
-    let spec = WavSpec {
-        channels: 1,
-        sample_rate: 16000,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
+    // Convert samples to WAV format
+    let wav_data = convert_samples_to_wav(&audio_samples).map_err(|e| {
+        error!("[Cloud Transcription - Gemini] {}", e);
+        e
+    })?;
 
-    let mut buffer = Cursor::new(Vec::new());
-    {
-        let mut writer = WavWriter::new(&mut buffer, spec)
-            .map_err(|e| {
-                error!("[Cloud Transcription - Gemini] Failed to create WAV writer: {}", e);
-                format!("Failed to create WAV writer: {}", e)
-            })?;
-
-        for sample in &audio_samples {
-            let i16_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-            writer.write_sample(i16_sample).map_err(|e| {
-                error!("[Cloud Transcription - Gemini] Failed to write sample: {}", e);
-                format!("Failed to write sample: {}", e)
-            })?;
-        }
-        writer.finalize().map_err(|e| {
-            error!("[Cloud Transcription - Gemini] Failed to finalize WAV: {}", e);
-            format!("Failed to finalize WAV: {}", e)
-        })?;
-    }
-
-    let wav_data = buffer.into_inner();
     let audio_base64 = BASE64.encode(&wav_data);
     
     info!("[Cloud Transcription - Gemini] Created WAV data: {} bytes, base64: {} chars", 
@@ -896,7 +871,7 @@ struct TestAction;
 impl ShortcutAction for TestAction {
     fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) {
         log::info!(
-            "Shortcut ID '{}': Started - {} (App: {})", // Changed "Pressed" to "Started" for consistency
+            "Shortcut ID '{}': Started - {} (App: {})",
             binding_id,
             shortcut_str,
             app.package_info().name
@@ -905,7 +880,7 @@ impl ShortcutAction for TestAction {
 
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) {
         log::info!(
-            "Shortcut ID '{}': Stopped - {} (App: {})", // Changed "Released" to "Stopped" for consistency
+            "Shortcut ID '{}': Stopped - {} (App: {})",
             binding_id,
             shortcut_str,
             app.package_info().name
