@@ -16,14 +16,29 @@ const unsupportedTranslationModels = [
   "turbo",
 ];
 
+// Default models for each online provider
+const DEFAULT_ONLINE_MODELS: Record<string, string> = {
+  openai: "whisper-1",
+  groq: "whisper-large-v3-turbo",
+  gemini: "gemini-2.5-flash",
+};
+
 export const TranslateToEnglish: React.FC<TranslateToEnglishProps> = React.memo(
   ({ descriptionMode = "tooltip", grouped = false }) => {
     const { t } = useTranslation();
-    const { getSetting, updateSetting, isUpdating } = useSettings();
+    const { getSetting, updateSetting, isUpdating, settings } = useSettings();
     const { currentModel, loadCurrentModel, models } = useModels();
 
     const translateToEnglish = getSetting("translate_to_english") || false;
     const useOnlineProvider = getSetting("use_online_provider") || false;
+
+    // Get the selected online model for display
+    const onlineProviderId = settings?.online_provider_id ?? "openai";
+    const onlineModel = settings?.online_provider_models?.[onlineProviderId] ?? DEFAULT_ONLINE_MODELS[onlineProviderId] ?? "";
+
+    // Check if the online model is a Whisper model (supports native translation)
+    const isWhisperModel = onlineModel.toLowerCase().includes("whisper");
+
     // Translation is supported when using online providers, regardless of local model
     const isDisabledTranslation =
       !useOnlineProvider && unsupportedTranslationModels.includes(currentModel);
@@ -41,8 +56,22 @@ export const TranslateToEnglish: React.FC<TranslateToEnglishProps> = React.memo(
         );
       }
 
+      if (useOnlineProvider) {
+        if (isWhisperModel) {
+          return t("settings.advanced.translateToEnglish.descriptionOnlineWhisper", {
+            model: onlineModel,
+            defaultValue: `Using ${onlineModel} with native translation support. Audio will be translated directly to English.`,
+          });
+        } else {
+          return t("settings.advanced.translateToEnglish.descriptionOnlineOther", {
+            model: onlineModel,
+            defaultValue: `Using ${onlineModel}. Translation is prompt-based and may vary in quality.`,
+          });
+        }
+      }
+
       return t("settings.advanced.translateToEnglish.description");
-    }, [t, models, currentModel, isDisabledTranslation]);
+    }, [t, models, currentModel, isDisabledTranslation, useOnlineProvider, onlineModel, isWhisperModel]);
 
     // Listen for model state changes to update UI reactively
     useEffect(() => {

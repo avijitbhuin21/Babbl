@@ -145,10 +145,19 @@ async fn transcribe_online(
         form
     };
 
-    // For non-Whisper models with translation enabled, add a prompt
+    // Detect if this is a GPT-4o transcribe model (uses "instructions" instead of "prompt")
+    let is_gpt4o_transcribe = provider.model.to_lowercase().contains("gpt-4o");
+    
+    // For GPT-4o transcribe models with translation enabled, use the "instructions" field
+    // For other non-Whisper models, use the "prompt" field
     let form = if translate_to_english && !is_whisper_model {
-        info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
-        form.text("prompt", "Please transcribe this audio and translate it to English.")
+        if is_gpt4o_transcribe {
+            info!("[Cloud Transcription] Adding translation instructions for GPT-4o transcribe model");
+            form.text("instructions", "Transcribe this audio and translate it to English. Output only the translated English text.")
+        } else {
+            info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
+            form.text("prompt", "Please transcribe this audio and translate it to English.")
+        }
     } else {
         form
     };

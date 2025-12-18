@@ -14,12 +14,19 @@ interface LanguageSelectorProps {
 
 const unsupportedModels = ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3"];
 
+// Default models for each online provider
+const DEFAULT_ONLINE_MODELS: Record<string, string> = {
+  openai: "whisper-1",
+  groq: "whisper-large-v3-turbo",
+  gemini: "gemini-2.5-flash",
+};
+
 export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   descriptionMode = "tooltip",
   grouped = false,
 }) => {
   const { t } = useTranslation();
-  const { getSetting, updateSetting, resetSetting, isUpdating } = useSettings();
+  const { getSetting, updateSetting, resetSetting, isUpdating, settings } = useSettings();
   const { currentModel, loadCurrentModel } = useModels();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,6 +35,11 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
 
   const selectedLanguage = getSetting("selected_language") || "auto";
   const useOnlineProvider = getSetting("use_online_provider") || false;
+
+  // Get the selected online model for display
+  const onlineProviderId = settings?.online_provider_id ?? "openai";
+  const onlineModel = settings?.online_provider_models?.[onlineProviderId] ?? DEFAULT_ONLINE_MODELS[onlineProviderId] ?? "";
+
   // Language selection is supported when using online providers, regardless of local model
   const isUnsupported = !useOnlineProvider && unsupportedModels.includes(currentModel);
 
@@ -107,14 +119,24 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
     }
   };
 
+  // Generate description based on current mode
+  const getDescription = () => {
+    if (isUnsupported) {
+      return t("settings.general.language.descriptionUnsupported");
+    }
+    if (useOnlineProvider) {
+      return t("settings.general.language.descriptionOnline", {
+        model: onlineModel,
+        defaultValue: `Using cloud model: ${onlineModel}. Select the language for speech recognition or use Auto to detect automatically.`,
+      });
+    }
+    return t("settings.general.language.description");
+  };
+
   return (
     <SettingContainer
       title={t("settings.general.language.title")}
-      description={
-        isUnsupported
-          ? t("settings.general.language.descriptionUnsupported")
-          : t("settings.general.language.description")
-      }
+      description={getDescription()}
       descriptionMode={descriptionMode}
       grouped={grouped}
       disabled={isUnsupported}
