@@ -13,6 +13,7 @@
   "onboarding": {
     "subtitle": "To get started, choose a transcription model",
     "recommended": "Recommended",
+    "skip": "Use online models only",
     "download": "Download",
     "downloading": "Downloading...",
     "modelCard": {
@@ -51,7 +52,7 @@
     }
   },
   "modelSelector": {
-    "welcome": "Welcome to Handy!",
+    "welcome": "Welcome to Babbl!",
     "downloadPrompt": "Download a model below to get started with transcription.",
     "availableModels": "Available Models",
     "downloadModels": "Download Models",

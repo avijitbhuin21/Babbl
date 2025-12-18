@@ -4,6 +4,7 @@ use serde::Deserialize;
 /// non-standard fields (like Groq's `service_tier: "on_demand"`)
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
@@ -17,6 +18,7 @@ pub struct ChatCompletionResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatChoice {
     pub index: u32,
     pub message: ChatMessage,
@@ -26,6 +28,7 @@ pub struct ChatChoice {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatMessage {
     pub role: String,
     pub content: Option<String>,

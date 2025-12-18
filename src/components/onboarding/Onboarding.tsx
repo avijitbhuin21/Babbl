@@ -59,7 +59,16 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col p-6 gap-4 inset-0">
+    <div className="h-screen w-screen flex flex-col p-6 gap-4 inset-0 relative">
+      {/* Skip button in top right */}
+      <button
+        onClick={onModelSelected}
+        disabled={downloading}
+        className="absolute top-4 right-4 px-4 py-2 text-sm font-medium text-text/70 bg-background-dark hover:bg-background-light hover:text-text hover:scale-105 hover:shadow-lg border border-white/10 rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {t("onboarding.skip")}
+      </button>
+
       <div className="flex flex-col items-center gap-2 shrink-0">
         <img src={babblLogo} alt="Babbl" style={{ width: 200 }} />
         <p className="text-text/70 max-w-md font-medium mx-auto">

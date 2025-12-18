@@ -54,6 +54,7 @@ impl InputElement {
     }
     
     /// Convert to string representation
+    #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         match self {
             InputElement::Key(k) => k.clone(),
@@ -550,6 +551,7 @@ impl InputHookManager {
     }
     
     /// Check if a shortcut is registered
+    #[allow(dead_code)]
     pub fn is_registered(&self, id: &str) -> bool {
         let state = self.state.read().unwrap();
         state.registered_shortcuts.contains_key(id)
@@ -598,6 +600,7 @@ pub fn resume_mouse_shortcut(id: &str) {
 }
 
 /// Check if a mouse shortcut is registered
+#[allow(dead_code)]
 pub fn is_mouse_shortcut_registered(id: &str) -> bool {
     InputHookManager::instance().is_registered(id)
 }
