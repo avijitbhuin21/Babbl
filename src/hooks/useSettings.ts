@@ -41,6 +41,8 @@ interface UseSettingsReturn {
   ) => Promise<void>;
   updatePostProcessModel: (providerId: string, model: string) => Promise<void>;
   fetchPostProcessModels: (providerId: string) => Promise<string[]>;
+  setRefineProvider: (providerId: string) => Promise<void>;
+  updateRefineModel: (providerId: string, model: string) => Promise<void>;
 }
 
 export const useSettings = (): UseSettingsReturn => {
@@ -74,5 +76,7 @@ export const useSettings = (): UseSettingsReturn => {
     updatePostProcessApiKey: store.updatePostProcessApiKey,
     updatePostProcessModel: store.updatePostProcessModel,
     fetchPostProcessModels: store.fetchPostProcessModels,
+    setRefineProvider: store.setRefineProvider,
+    updateRefineModel: store.updateRefineModel,
   };
 };

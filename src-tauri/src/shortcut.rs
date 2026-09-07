@@ -21,9 +21,13 @@ pub fn init_shortcuts(app: &AppHandle) {
     let user_settings = settings::load_or_create_app_settings(app);
 
     // Register all default shortcuts, applying user customizations
+    let shared_refine = crate::actions::refine_shares_transcribe_binding(&user_settings);
     for (id, default_binding) in default_bindings {
         if id == "cancel" {
             continue; // Skip cancel shortcut, it will be registered dynamically
+        }
+        if id == "refine" && shared_refine {
+            continue; // Handled by the transcribe binding when both share a key
         }
         let binding = user_settings
             .bindings
@@ -81,6 +85,37 @@ pub fn change_binding(
         }
     }
 
+    // Transcribe and refine may share one key, so they are (un)registered together
+    if id == "transcribe" || id == "refine" {
+        if let Err(e) = validate_shortcut_string(&binding) {
+            warn!("change_binding validation error: {}", e);
+            return Err(e);
+        }
+
+        unregister_transcribe_and_refine(&app, &settings);
+
+        let mut updated_binding = binding_to_modify;
+        updated_binding.current_binding = binding;
+        settings.bindings.insert(id.clone(), updated_binding.clone());
+        settings::write_settings(&app, settings.clone());
+
+        if let Err(e) = sync_transcribe_and_refine(&app, &settings) {
+            let error_msg = format!("Failed to register shortcut: {}", e);
+            error!("change_binding error: {}", error_msg);
+            return Ok(BindingResponse {
+                success: false,
+                binding: None,
+                error: Some(error_msg),
+            });
+        }
+
+        return Ok(BindingResponse {
+            success: true,
+            binding: Some(updated_binding),
+            error: None,
+        });
+    }
+
     // Unregister the existing binding
     if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
         let error_msg = format!("Failed to unregister shortcut: {}", e);
@@ -122,10 +157,93 @@ pub fn change_binding(
     })
 }
 
+/// Unregisters both the transcribe and refine bindings, ignoring errors for keys that were not registered.
+fn unregister_transcribe_and_refine(app: &AppHandle, settings: &settings::AppSettings) {
+    for id in ["transcribe", "refine"] {
+        if let Some(binding) = settings.bindings.get(id).cloned() {
+            if is_binding_registered(app, &binding) {
+                let _ = unregister_shortcut(app, binding);
+            }
+        }
+    }
+}
+
+/// Returns true if the binding is currently registered with the OS-level hook.
+fn is_binding_registered(app: &AppHandle, binding: &ShortcutBinding) -> bool {
+    if input_hook::contains_mouse_button(&binding.current_binding) {
+        return input_hook::is_mouse_shortcut_registered(&binding.id);
+    }
+    binding
+        .current_binding
+        .parse::<Shortcut>()
+        .map(|s| app.global_shortcut().is_registered(s))
+        .unwrap_or(false)
+}
+
+/// Registers transcribe, and refine only when it has its own key, so a shared key fires a single action.
+pub fn sync_transcribe_and_refine(app: &AppHandle, settings: &settings::AppSettings) -> Result<(), String> {
+    let transcribe = settings
+        .bindings
+        .get("transcribe")
+        .cloned()
+        .ok_or_else(|| "transcribe binding missing".to_string())?;
+    if !is_binding_registered(app, &transcribe) {
+        register_shortcut(app, transcribe)?;
+    }
+
+    if crate::actions::refine_shares_transcribe_binding(settings) {
+        return Ok(());
+    }
+
+    if let Some(refine) = settings.bindings.get("refine").cloned() {
+        if !is_binding_registered(app, &refine) {
+            register_shortcut(app, refine)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_refine_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.refine_enabled = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_refine_provider(app: AppHandle, provider_id: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    validate_provider_exists(&settings, &provider_id)?;
+    settings.refine_provider_id = provider_id;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_refine_model_setting(
+    app: AppHandle,
+    provider_id: String,
+    model: String,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    validate_provider_exists(&settings, &provider_id)?;
+    settings.refine_models.insert(provider_id, model);
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn reset_binding(app: AppHandle, id: String) -> Result<BindingResponse, String> {
     let binding = settings::get_stored_binding(&app, &id);
+    if id == "refine" {
+        let transcribe = settings::get_stored_binding(&app, "transcribe");
+        return change_binding(app, id, transcribe.current_binding);
+    }
 
     return change_binding(app, id, binding.default_binding);
 }
@@ -734,7 +852,7 @@ pub fn change_app_language_setting(app: AppHandle, language: String) -> Result<(
 
 /// Validate that an online provider ID is valid
 fn validate_online_provider_id(provider_id: &str) -> Result<(), String> {
-    let valid_providers = ["openai", "groq", "gemini", "sambanova"];
+    let valid_providers = ["openai", "groq", "gemini", "openrouter", "sambanova"];
     if valid_providers.contains(&provider_id) {
         Ok(())
     } else {
@@ -818,6 +936,20 @@ fn validate_shortcut_string(raw: &str) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
+    if id == "transcribe" || id == "refine" {
+        let settings = settings::get_settings(&app);
+        for bid in ["transcribe", "refine"] {
+            if let Some(b) = settings.bindings.get(bid).cloned() {
+                if input_hook::contains_mouse_button(&b.current_binding) {
+                    input_hook::suspend_mouse_shortcut(bid);
+                } else {
+                    let _ = unregister_shortcut(&app, b);
+                }
+            }
+        }
+        return Ok(());
+    }
+
     if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
         // Check if this is a mouse shortcut
         if input_hook::contains_mouse_button(&b.current_binding) {
@@ -837,6 +969,18 @@ pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn resume_binding(app: AppHandle, id: String) -> Result<(), String> {
+    if id == "transcribe" || id == "refine" {
+        let settings = settings::get_settings(&app);
+        for bid in ["transcribe", "refine"] {
+            input_hook::resume_mouse_shortcut(bid);
+        }
+        if let Err(e) = sync_transcribe_and_refine(&app, &settings) {
+            error!("resume_binding error for id '{}': {}", id, e);
+            return Err(e);
+        }
+        return Ok(());
+    }
+
     if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
         // Check if this is a mouse shortcut
         if input_hook::contains_mouse_button(&b.current_binding) {

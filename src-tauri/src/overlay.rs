@@ -154,6 +154,7 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
         .skip_taskbar(true)
         .transparent(true)
         .focused(false)
+        .focusable(false)
         .visible(false)
         .build()
         {
@@ -205,7 +206,7 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
 }
 
 /// Shows the recording overlay window with fade-in animation
-pub fn show_recording_overlay(app_handle: &AppHandle) {
+pub fn show_recording_overlay(app_handle: &AppHandle, refine_mode: bool) {
     // Check if overlay should be shown based on position setting
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
@@ -225,13 +226,23 @@ pub fn show_recording_overlay(app_handle: &AppHandle) {
         #[cfg(target_os = "windows")]
         force_overlay_topmost(&overlay_window);
 
-        // Emit event to trigger fade-in animation with recording state
-        let _ = overlay_window.emit("show-overlay", "recording");
+        let state = if refine_mode { "recording_refine" } else { "recording" };
+        let _ = overlay_window.emit("show-overlay", state);
     }
+}
+
+/// Shows the overlay in the "refining selection" state
+pub fn show_refining_overlay(app_handle: &AppHandle) {
+    show_processing_overlay(app_handle, "refining");
 }
 
 /// Shows the transcribing overlay window
 pub fn show_transcribing_overlay(app_handle: &AppHandle) {
+    show_processing_overlay(app_handle, "transcribing");
+}
+
+/// Shows the overlay in a processing state ("transcribing" or "refining")
+fn show_processing_overlay(app_handle: &AppHandle, state: &str) {
     // Check if overlay should be shown based on position setting
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
@@ -247,8 +258,7 @@ pub fn show_transcribing_overlay(app_handle: &AppHandle) {
         #[cfg(target_os = "windows")]
         force_overlay_topmost(&overlay_window);
 
-        // Emit event to switch to transcribing state
-        let _ = overlay_window.emit("show-overlay", "transcribing");
+        let _ = overlay_window.emit("show-overlay", state);
     }
 }
 

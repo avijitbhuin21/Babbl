@@ -67,6 +67,19 @@
   animation: transcribing-pulse 1.5s infinite ease-in-out;
 }
 
+.bar-refine {
+  background: #E0A85A;
+}
+
+.overlay-error .transcribing-text {
+  color: #E06C6C;
+  animation: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes transcribing-pulse {
 
   0%,

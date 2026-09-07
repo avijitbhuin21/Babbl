@@ -47,6 +47,8 @@ interface SettingsStore {
   updatePostProcessModel: (providerId: string, model: string) => Promise<void>;
   fetchPostProcessModels: (providerId: string) => Promise<string[]>;
   setPostProcessModelOptions: (providerId: string, models: string[]) => void;
+  setRefineProvider: (providerId: string) => Promise<void>;
+  updateRefineModel: (providerId: string, model: string) => Promise<void>;
 
   // Internal state setters
   setSettings: (settings: Settings | null) => void;
@@ -125,6 +127,8 @@ const settingUpdaters: {
     commands.changeAppendTrailingSpaceSetting(value as boolean),
   log_level: (value) => commands.setLogLevel(value as any),
   app_language: (value) => commands.changeAppLanguageSetting(value as string),
+  refine_enabled: (value) =>
+    commands.changeRefineEnabledSetting(value as boolean),
   // Online provider settings
   use_online_provider: (value) =>
     commands.changeUseOnlineProviderSetting(value as boolean),
@@ -491,6 +495,38 @@ export const useSettingsStore = create<SettingsStore>()(
           [providerId]: models,
         },
       })),
+
+    setRefineProvider: async (providerId) => {
+      const { setUpdating, refreshSettings } = get();
+      setUpdating("refine_provider_id", true);
+      set((state) => ({
+        settings: state.settings
+          ? { ...state.settings, refine_provider_id: providerId }
+          : null,
+      }));
+      try {
+        await commands.setRefineProvider(providerId);
+        await refreshSettings();
+      } catch (error) {
+        console.error("Failed to set refine provider:", error);
+      } finally {
+        setUpdating("refine_provider_id", false);
+      }
+    },
+
+    updateRefineModel: async (providerId, model) => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = `refine_model:${providerId}`;
+      setUpdating(updateKey, true);
+      try {
+        await commands.changeRefineModelSetting(providerId, model);
+        await refreshSettings();
+      } catch (error) {
+        console.error("Failed to update refine model:", error);
+      } finally {
+        setUpdating(updateKey, false);
+      }
+    },
 
     // Load default settings from Rust
     loadDefaultSettings: async () => {

@@ -7,10 +7,12 @@ import { SettingContainer } from "../../ui/SettingContainer";
 import { Button } from "../../ui/Button";
 import { AppDataDirectory } from "../AppDataDirectory";
 import { AppLanguageSelector } from "../AppLanguageSelector";
+import { commands, type BuildInfo } from "@/bindings";
 
 export const AboutSettings: React.FC = () => {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
+  const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -19,7 +21,12 @@ export const AboutSettings: React.FC = () => {
         setVersion(appVersion);
       } catch (error) {
         console.error("Failed to get app version:", error);
-        setVersion("0.1.2");
+        setVersion("unknown");
+      }
+      try {
+        setBuildInfo(await commands.getBuildInfo());
+      } catch (error) {
+        console.error("Failed to get build info:", error);
       }
     };
 
@@ -46,6 +53,25 @@ export const AboutSettings: React.FC = () => {
           {/* eslint-disable-next-line i18next/no-literal-string */}
           <span className="text-sm font-mono">v{version}</span>
         </SettingContainer>
+
+        {buildInfo && (
+          <SettingContainer
+            title={t("settings.about.build.title", "Build")}
+            description={t(
+              "settings.about.build.description",
+              "Commit this build was made from, and the signing key updates must match. Official builds are signed with this key.",
+            )}
+            descriptionMode="tooltip"
+            grouped={true}
+          >
+            <div className="flex flex-col items-end gap-0.5 text-xs font-mono text-text/70">
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <span title="Git commit">commit {buildInfo.git_hash}</span>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <span title={buildInfo.updater_endpoint}>key …{buildInfo.updater_pubkey_fingerprint}</span>
+            </div>
+          </SettingContainer>
+        )}
 
         <AppDataDirectory descriptionMode="tooltip" grouped={true} />
 

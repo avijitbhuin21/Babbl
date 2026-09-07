@@ -89,6 +89,10 @@
             "name": "Transcribe",
             "description": "Converts your speech into text."
           },
+          "refine": {
+            "name": "Refine shortcut",
+            "description": "Shortcut used to rewrite selected text with a spoken instruction. Leave it identical to Transcribe to use one key for both."
+          },
           "cancel": {
             "name": "Cancel",
             "description": "Cancels the current recording."
@@ -417,6 +421,8 @@
     "checkingUpdates": "Checking for updates...",
     "updateAvailable": "Update available: {{version}}",
     "updateAvailableShort": "Update available",
+    "updateAvailableVersion": "Update to v{{version}}",
+    "updateError": "Update check failed: {{error}}",
     "upToDate": "Up to date",
     "downloadUpdate": "Download Update",
     "restart": "Restart",
@@ -462,6 +468,8 @@
     "description": "Change the language of the Babbl interface"
   },
   "overlay": {
-    "transcribing": "Transcribing..."
+    "transcribing": "Transcribing...",
+    "refining": "Refining...",
+    "error": "Error"
   }
 }

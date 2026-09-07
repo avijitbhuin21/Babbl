@@ -6,13 +6,14 @@ import { SettingsGroup } from "../../ui/SettingsGroup";
 import { SettingContainer } from "../../ui/SettingContainer";
 import { Eye, EyeOff } from "lucide-react";
 import { Input } from "../../ui/Input";
-import { Button } from "../../ui/Button";
+import { LlmPurposeSettings } from "./LlmPurposeSettings";
 
 // Online provider configurations (removed SambaNova)
 const ONLINE_PROVIDERS: DropdownOption[] = [
     { value: "openai", label: "OpenAI" },
     { value: "groq", label: "Groq" },
     { value: "gemini", label: "Gemini" },
+    { value: "openrouter", label: "OpenRouter" },
 ];
 
 // Models available for each provider
@@ -32,12 +33,19 @@ const PROVIDER_MODELS: Record<string, DropdownOption[]> = {
         { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
         { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite" },
     ],
+    openrouter: [
+        { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+        { value: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
+        { value: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash" },
+        { value: "openai/gpt-4o-audio-preview", label: "GPT-4o Audio Preview" },
+    ],
 };
 
 const DEFAULT_MODELS: Record<string, string> = {
     openai: "whisper-1",
     groq: "whisper-large-v3-turbo",
     gemini: "gemini-2.5-flash",
+    openrouter: "google/gemini-2.5-flash",
 };
 
 export const OnlineProviderSettings: React.FC = () => {
@@ -93,7 +101,10 @@ export const OnlineProviderSettings: React.FC = () => {
 
     return (
         <div className="w-full space-y-8">
-            <SettingsGroup title={t("settings.onlineProviders.title", "Online Providers")}>
+            <SettingsGroup
+                title={t("settings.cloudModels.transcription.title", "Transcription")}
+                description={t("settings.cloudModels.transcription.description", "Model used to turn your speech into text.")}
+            >
                 {/* Provider Selection */}
                 <SettingContainer
                     title={t("settings.onlineProviders.provider.title", "Provider")}
@@ -162,6 +173,16 @@ export const OnlineProviderSettings: React.FC = () => {
                         </button>
                     </div>
                 </SettingContainer>
+            </SettingsGroup>
+
+            <SettingsGroup
+                title={t("settings.cloudModels.refine.title", "Refine")}
+                description={t(
+                    "settings.cloudModels.refine.description",
+                    "Model that rewrites selected text from your spoken instruction. Defaults to the post-processing choice.",
+                )}
+            >
+                <LlmPurposeSettings purpose="refine" />
             </SettingsGroup>
         </div>
     );

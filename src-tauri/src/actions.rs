@@ -4,15 +4,17 @@ use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, S
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
+use crate::notify;
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
-use crate::utils::{self, show_recording_overlay, show_transcribing_overlay};
+use crate::utils::{self, show_recording_overlay, show_transcribing_overlay, show_refining_overlay};
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
-use log::{debug, error};
+use log::{debug, error, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::AppHandle;
 use tauri::Manager;
@@ -73,11 +75,11 @@ async fn transcribe_online(
     language: Option<String>,
     translate_to_english: bool,
 ) -> Result<String, String> {
-    // Use different API flow for Gemini (chat completions with audio)
-    if provider.provider_id == "gemini" {
-        return transcribe_online_gemini(provider, audio_samples, language, translate_to_english).await;
+    // Providers without a Whisper-style audio endpoint use chat completions with audio input
+    if provider.provider_id == "gemini" || provider.provider_id == "openrouter" {
+        return transcribe_online_chat_audio(provider, audio_samples, language, translate_to_english).await;
     }
-    
+
     // Standard OpenAI-compatible /audio/transcriptions flow for OpenAI and Groq
     use log::info;
 
@@ -85,11 +87,9 @@ async fn transcribe_online(
         "[Cloud Transcription] Starting with provider: {} (model: {})",
         provider.base_url, provider.model
     );
-    debug!(
-        "[Cloud Transcription] API key present: {}, length: {}",
-        !provider.api_key.is_empty(),
-        provider.api_key.len()
-    );
+    if provider.api_key.is_empty() {
+        error!("[Cloud Transcription] API key is empty");
+    }
 
     // Convert samples to WAV format
     let wav_data = convert_samples_to_wav(&audio_samples).map_err(|e| {
@@ -205,11 +205,11 @@ async fn transcribe_online(
             format!("Failed to read response: {}", e)
         })?;
 
-    debug!("[Cloud Transcription] Raw response: {}", response_text);
+    debug!("[Cloud Transcription] Response body: {} bytes", response_text.len());
 
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| {
-            error!("[Cloud Transcription] Failed to parse JSON response: {}. Raw: {}", e, response_text);
+            error!("[Cloud Transcription] Failed to parse JSON response: {}", e);
             format!("Failed to parse response: {}", e)
         })?;
 
@@ -227,8 +227,8 @@ async fn transcribe_online(
     Ok(text)
 }
 
-/// Transcribe audio using Gemini's chat completions API with multimodal input
-async fn transcribe_online_gemini(
+/// Transcribe audio via an OpenAI-compatible chat completions API with multimodal audio input (Gemini, OpenRouter)
+async fn transcribe_online_chat_audio(
     provider: OnlineTranscriptionProvider,
     audio_samples: Vec<f32>,
     language: Option<String>,
@@ -237,27 +237,24 @@ async fn transcribe_online_gemini(
     use log::info;
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
-    info!(
-        "[Cloud Transcription - Gemini] Starting with model: {}",
-        provider.model
-    );
+    let tag = format!("[Cloud Transcription - {}]", provider.provider_id);
+
+    info!("{} Starting with model: {}", tag, provider.model);
 
     // Convert samples to WAV format
     let wav_data = convert_samples_to_wav(&audio_samples).map_err(|e| {
-        error!("[Cloud Transcription - Gemini] {}", e);
+        error!("{} {}", tag, e);
         e
     })?;
 
     let audio_base64 = BASE64.encode(&wav_data);
-    
-    info!("[Cloud Transcription - Gemini] Created WAV data: {} bytes, base64: {} chars", 
-        wav_data.len(), audio_base64.len()
-    );
+
+    info!("{} Created WAV data: {} bytes, base64: {} chars", tag, wav_data.len(), audio_base64.len());
 
     // Build the chat completions endpoint URL
     let base_url = provider.base_url.trim_end_matches('/');
     let endpoint = format!("{}/chat/completions", base_url);
-    info!("[Cloud Transcription - Gemini] Sending request to: {}", endpoint);
+    info!("{} Sending request to: {}", tag, endpoint);
 
     // Build transcription prompt with optional translation
     let transcription_prompt = if translate_to_english {
@@ -304,22 +301,29 @@ async fn transcribe_online_gemini(
 
     // Create HTTP client and send request
     let client = reqwest::Client::new();
-    info!("[Cloud Transcription - Gemini] Sending POST request...");
-    
-    let response = client
+    info!("{} Sending POST request...", tag);
+
+    let mut request = client
         .post(&endpoint)
         .header("Content-Type", "application/json")
-        .bearer_auth(&provider.api_key)
+        .bearer_auth(&provider.api_key);
+    if provider.provider_id == "openrouter" {
+        request = request
+            .header("HTTP-Referer", "https://github.com/avijitbhuin21/Babbl")
+            .header("X-Title", "Babbl");
+    }
+
+    let response = request
         .json(&request_body)
         .send()
         .await
         .map_err(|e| {
-            error!("[Cloud Transcription - Gemini] Network error: {}", e);
+            error!("{} Network error: {}", tag, e);
             format!("Failed to send transcription request: {}", e)
         })?;
 
     let status = response.status();
-    info!("[Cloud Transcription - Gemini] Received response with status: {}", status);
+    info!("{} Received response with status: {}", tag, status);
 
     if !status.is_success() {
         let error_text = response
@@ -327,12 +331,12 @@ async fn transcribe_online_gemini(
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
         error!(
-            "[Cloud Transcription - Gemini] API ERROR - Status: {}, Model: {}, Response: {}",
-            status, provider.model, error_text
+            "{} API ERROR - Status: {}, Model: {}, Response: {}",
+            tag, status, provider.model, error_text
         );
         return Err(format!(
-            "Gemini transcription failed ({}): {}",
-            status, error_text
+            "{} transcription failed ({}): {}",
+            provider.provider_id, status, error_text
         ));
     }
 
@@ -341,15 +345,15 @@ async fn transcribe_online_gemini(
         .text()
         .await
         .map_err(|e| {
-            error!("[Cloud Transcription - Gemini] Failed to read response body: {}", e);
+            error!("{} Failed to read response body: {}", tag, e);
             format!("Failed to read response: {}", e)
         })?;
 
-    debug!("[Cloud Transcription - Gemini] Raw response: {}", response_text);
+    debug!("{} Response body: {} bytes", tag, response_text.len());
 
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| {
-            error!("[Cloud Transcription - Gemini] Failed to parse JSON: {}. Raw: {}", e, response_text);
+            error!("{} Failed to parse JSON: {}", tag, e);
             format!("Failed to parse response: {}", e)
         })?;
 
@@ -364,10 +368,7 @@ async fn transcribe_online_gemini(
         .trim()
         .to_string();
 
-    info!(
-        "[Cloud Transcription - Gemini] SUCCESS - Transcribed {} chars",
-        text.len()
-    );
+    info!("{} SUCCESS - Transcribed {} chars", tag, text.len());
 
     Ok(text)
 }
@@ -399,6 +400,7 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
                 "openai" => "whisper-1".to_string(),
                 "groq" => "whisper-large-v3-turbo".to_string(),
                 "gemini" => "gemini-2.5-flash".to_string(),
+                "openrouter" => "google/gemini-2.5-flash".to_string(),
                 _ => "whisper-1".to_string(),
             }
         });
@@ -408,6 +410,7 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
         "openai" => "https://api.openai.com/v1".to_string(),
         "groq" => "https://api.groq.com/openai/v1".to_string(),
         "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+        "openrouter" => "https://openrouter.ai/api/v1".to_string(),
         _ => {
             error!("Unknown online provider: {}", provider_id);
             return None;
@@ -426,16 +429,15 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
 async fn maybe_post_process_transcription(
     settings: &AppSettings,
     transcription: &str,
-) -> Option<String> {
+) -> Result<Option<String>, String> {
     if !settings.post_process_enabled {
-        return None;
+        return Ok(None);
     }
 
     let provider = match settings.active_post_process_provider().cloned() {
         Some(provider) => provider,
         None => {
-            debug!("Post-processing enabled but no provider is selected");
-            return None;
+            return Err("Post-processing is enabled but no provider is selected.".to_string());
         }
     };
 
@@ -446,18 +448,16 @@ async fn maybe_post_process_transcription(
         .unwrap_or_default();
 
     if model.trim().is_empty() {
-        debug!(
-            "Post-processing skipped because provider '{}' has no model configured",
-            provider.id
-        );
-        return None;
+        return Err(format!(
+            "Post-processing provider '{}' has no model configured.",
+            provider.label
+        ));
     }
 
     let selected_prompt_id = match &settings.post_process_selected_prompt_id {
         Some(id) => id.clone(),
         None => {
-            debug!("Post-processing skipped because no prompt is selected");
-            return None;
+            return Err("Post-processing is enabled but no prompt is selected.".to_string());
         }
     };
 
@@ -468,17 +468,15 @@ async fn maybe_post_process_transcription(
     {
         Some(prompt) => prompt.prompt.clone(),
         None => {
-            debug!(
-                "Post-processing skipped because prompt '{}' was not found",
+            return Err(format!(
+                "Selected post-processing prompt '{}' was not found.",
                 selected_prompt_id
-            );
-            return None;
+            ));
         }
     };
 
     if prompt.trim().is_empty() {
-        debug!("Post-processing skipped because the selected prompt is empty");
-        return None;
+        return Err("The selected post-processing prompt is empty.".to_string());
     }
 
     debug!(
@@ -494,35 +492,29 @@ async fn maybe_post_process_transcription(
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         {
             if !apple_intelligence::check_apple_intelligence_availability() {
-                debug!("Apple Intelligence selected but not currently available on this device");
-                return None;
+                return Err("Apple Intelligence is selected but not currently available on this device.".to_string());
             }
 
             let token_limit = model.trim().parse::<i32>().unwrap_or(0);
             return match apple_intelligence::process_text(&processed_prompt, token_limit) {
                 Ok(result) => {
                     if result.trim().is_empty() {
-                        debug!("Apple Intelligence returned an empty response");
-                        None
+                        Err("Apple Intelligence returned an empty response.".to_string())
                     } else {
                         debug!(
                             "Apple Intelligence post-processing succeeded. Output length: {} chars",
                             result.len()
                         );
-                        Some(result)
+                        Ok(Some(result))
                     }
                 }
-                Err(err) => {
-                    error!("Apple Intelligence post-processing failed: {}", err);
-                    None
-                }
+                Err(err) => Err(format!("Apple Intelligence post-processing failed: {}", err)),
             };
         }
 
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
-            debug!("Apple Intelligence provider selected on unsupported platform");
-            return None;
+            return Err("Apple Intelligence is not available on this platform.".to_string());
         }
     }
 
@@ -532,39 +524,24 @@ async fn maybe_post_process_transcription(
         .cloned()
         .unwrap_or_default();
 
-    // Create OpenAI-compatible client
-    let client = match crate::llm_client::create_client(&provider, api_key) {
-        Ok(client) => client,
-        Err(e) => {
-            error!("Failed to create LLM client: {}", e);
-            return None;
-        }
-    };
+    let client = crate::llm_client::create_client(&provider, api_key)
+        .map_err(|e| format!("Failed to create LLM client: {}", e))?;
 
-    // Send the chat completion request using our custom client
-    match client.chat_completion(&model, &processed_prompt).await {
-        Ok(content) => {
-            if content.trim().is_empty() {
-                error!("LLM API response has empty content");
-                None
-            } else {
-                debug!(
-                    "LLM post-processing succeeded for provider '{}'. Output length: {} chars",
-                    provider.id,
-                    content.len()
-                );
-                Some(content)
-            }
-        }
-        Err(e) => {
-            error!(
-                "LLM post-processing failed for provider '{}': {}. Falling back to original transcription.",
-                provider.id,
-                e
-            );
-            None
-        }
+    let content = client
+        .chat_completion(&model, &processed_prompt)
+        .await
+        .map_err(|e| format!("LLM request to '{}' failed: {}", provider.label, e))?;
+
+    if content.trim().is_empty() {
+        return Err(format!("LLM '{}' returned an empty response.", provider.label));
     }
+
+    debug!(
+        "LLM post-processing succeeded for provider '{}'. Output length: {} chars",
+        provider.id,
+        content.len()
+    );
+    Ok(Some(content))
 }
 
 async fn maybe_convert_chinese_variant(
@@ -576,7 +553,6 @@ async fn maybe_convert_chinese_variant(
     let is_traditional = settings.selected_language == "zh-Hant";
 
     if !is_simplified && !is_traditional {
-        debug!("selected_language is not Simplified or Traditional Chinese; skipping translation");
         return None;
     }
 
@@ -611,13 +587,202 @@ async fn maybe_convert_chinese_variant(
     }
 }
 
+/// Holds the text that was selected when a refine-mode recording started.
+#[derive(Default)]
+pub struct RefineState {
+    pub pending_selection: Mutex<Option<String>>,
+}
+
+/// True while a stop -> transcribe -> (refine) -> paste pipeline is running.
+pub static PIPELINE_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// Clears PIPELINE_BUSY when the pipeline task ends, on every exit path.
+struct BusyGuard;
+
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        PIPELINE_BUSY.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Replaces em/en dashes and double hyphens with plain punctuation so pasted text never contains them.
+pub fn strip_em_dashes(text: &str) -> String {
+    let mut out = text
+        .replace(" \u{2014} ", ", ")
+        .replace("\u{2014}", ", ")
+        .replace(" \u{2013} ", ", ")
+        .replace("\u{2013}", ", ")
+        .replace(" -- ", ", ")
+        .replace("--", ", ");
+    while out.contains(",,") {
+        out = out.replace(",,", ",");
+    }
+    out = out.replace(" ,", ",").replace(",  ", ", ");
+    out = out.replace(", \n", ".\n").replace(", \r\n", ".\r\n");
+    if let Some(stripped) = out.strip_suffix(", ") {
+        out = format!("{}.", stripped);
+    } else if let Some(stripped) = out.strip_suffix(",") {
+        out = format!("{}.", stripped);
+    }
+    out
+}
+
+/// Rewrites the selected text according to a spoken instruction using the configured post-processing LLM.
+async fn refine_selected_text(
+    settings: &AppSettings,
+    selected_text: &str,
+    instruction: &str,
+) -> Result<String, String> {
+    let provider_id = if settings.refine_provider_id.trim().is_empty() {
+        settings.post_process_provider_id.clone()
+    } else {
+        settings.refine_provider_id.clone()
+    };
+    let provider = settings
+        .post_process_provider(&provider_id)
+        .cloned()
+        .ok_or_else(|| "No refine provider is selected. Configure one under Cloud Models > Refine.".to_string())?;
+
+    if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
+        return Err("Refine mode requires an API-based provider.".to_string());
+    }
+
+    let model = settings
+        .refine_models
+        .get(&provider.id)
+        .cloned()
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| settings.post_process_models.get(&provider.id).cloned())
+        .unwrap_or_default();
+    if model.trim().is_empty() {
+        return Err(format!(
+            "No refine model configured for provider '{}'. Pick one under Cloud Models > Refine.",
+            provider.label
+        ));
+    }
+
+    let api_key = settings
+        .post_process_api_keys
+        .get(&provider.id)
+        .cloned()
+        .unwrap_or_default();
+    if api_key.trim().is_empty() && provider.id != "custom" {
+        return Err(format!(
+            "No API key configured for provider '{}'. Add one under Cloud Models > Refine.",
+            provider.label
+        ));
+    }
+
+    let prompt = format!(
+        "You are a precise text editor. Rewrite the TEXT below by following the INSTRUCTION.\n\
+         Rules:\n\
+         - Return only the rewritten text. No explanations, quotes, titles, or preamble.\n\
+         - Preserve the original language, formatting, and line breaks unless the instruction says otherwise.\n\
+         - Never use em dashes or en dashes.\n\n\
+         INSTRUCTION:\n{}\n\nTEXT:\n{}",
+        instruction.trim(),
+        selected_text
+    );
+
+    debug!(
+        "Refine: provider '{}' model '{}', selection {} chars, instruction {} chars",
+        provider.id,
+        model,
+        selected_text.len(),
+        instruction.len()
+    );
+
+    let client = crate::llm_client::create_client(&provider, api_key)?;
+    let content = client.chat_completion(&model, &prompt).await?;
+    if content.trim().is_empty() {
+        return Err("The model returned an empty response.".to_string());
+    }
+    Ok(content.trim().to_string())
+}
+
+/// Returns true when the refine binding is the same key as the transcribe binding.
+pub fn refine_shares_transcribe_binding(settings: &AppSettings) -> bool {
+    match (settings.bindings.get("refine"), settings.bindings.get("transcribe")) {
+        (Some(r), Some(t)) => {
+            r.current_binding.trim().eq_ignore_ascii_case(t.current_binding.trim())
+        }
+        _ => false,
+    }
+}
+
+/// Decides whether this shortcut press should refine a selection and captures it if so.
+fn resolve_refine_selection(app: &AppHandle, settings: &AppSettings, binding_id: &str) -> Result<Option<String>, String> {
+    let is_refine_key = binding_id == "refine";
+    let shared = refine_shares_transcribe_binding(settings);
+
+    if !settings.refine_enabled {
+        if is_refine_key {
+            return Err("Refine mode is disabled in settings.".to_string());
+        }
+        return Ok(None);
+    }
+
+    let should_probe = is_refine_key || shared;
+    if !should_probe {
+        return Ok(None);
+    }
+
+    let selection = utils::capture_selected_text(app)?;
+    match selection {
+        Some(text) if !text.trim().is_empty() => {
+            if text.chars().count() > MAX_REFINE_SELECTION_CHARS {
+                return Err(format!(
+                    "Selection is too long to refine ({} characters, max {}).",
+                    text.chars().count(),
+                    MAX_REFINE_SELECTION_CHARS
+                ));
+            }
+            Ok(Some(text))
+        }
+        _ if is_refine_key && !shared => Err("Select some text first, then press the refine shortcut.".to_string()),
+        _ => Ok(None),
+    }
+}
+
+const MAX_REFINE_SELECTION_CHARS: usize = 20_000;
+
+/// Resets UI state and reports a pipeline failure to the user.
+fn fail_and_reset(app: &AppHandle, title: &str, message: &str) {
+    notify::report_error(app, title, message);
+    utils::hide_recording_overlay(app);
+    change_tray_icon(app, TrayIconState::Idle);
+}
+
 impl ShortcutAction for TranscribeAction {
     fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
 
-        // Only load the local model if we're NOT using an online provider
+        if PIPELINE_BUSY.load(Ordering::SeqCst) {
+            debug!("Ignoring shortcut press: previous transcription is still processing");
+            if let Ok(mut states) = app.state::<crate::ManagedToggleState>().lock() {
+                states.active_toggles.insert(binding_id.to_string(), false);
+            }
+            return;
+        }
+
         let settings = get_settings(app);
+
+        let selection = match resolve_refine_selection(app, &settings, binding_id) {
+            Ok(selection) => selection,
+            Err(message) => {
+                notify::report_error(app, "Refine", &message);
+                return;
+            }
+        };
+        let is_refine = selection.is_some();
+        if let Some(state) = app.try_state::<RefineState>() {
+            if let Ok(mut pending) = state.pending_selection.lock() {
+                *pending = selection;
+            }
+        }
+
+        // Only load the local model if we're NOT using an online provider
         if !settings.use_online_provider {
             let tm = app.state::<Arc<TranscriptionManager>>();
             tm.initiate_model_load();
@@ -627,14 +792,13 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string();
         change_tray_icon(app, TrayIconState::Recording);
-        show_recording_overlay(app);
+        show_recording_overlay(app, is_refine);
 
         let rm = app.state::<Arc<AudioRecordingManager>>();
 
         // Get the microphone mode to determine audio feedback timing
-        let settings = get_settings(app);
         let is_always_on = settings.always_on_microphone;
-        debug!("Microphone mode - always_on: {}", is_always_on);
+        debug!("Microphone mode - always_on: {}, refine: {}", is_always_on, is_refine);
 
         let mut recording_started = false;
         if is_always_on {
@@ -670,14 +834,19 @@ impl ShortcutAction for TranscribeAction {
                     play_feedback_sound_blocking(&app_clone, SoundType::Start);
                     rm_clone.apply_mute();
                 });
-            } else {
-                debug!("Failed to start recording");
             }
         }
 
         if recording_started {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
+        } else {
+            take_pending_selection(app);
+            fail_and_reset(
+                app,
+                "Recording",
+                "Could not start recording. Check that a microphone is connected and not in use by another app.",
+            );
         }
 
         debug!(
@@ -698,8 +867,25 @@ impl ShortcutAction for TranscribeAction {
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
         let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
 
+        let selected_text = take_pending_selection(app);
+        let is_refine = selected_text.is_some();
+
+        if let Some(expected) = selected_text.as_deref() {
+            match utils::capture_selected_text(app) {
+                Ok(probe) => debug!(
+                    "Refine: selection intact at stop press: {}",
+                    probe.as_deref().map(str::trim) == Some(expected.trim())
+                ),
+                Err(e) => debug!("Refine: selection probe at stop failed: {}", e),
+            }
+        }
+
         change_tray_icon(app, TrayIconState::Transcribing);
-        show_transcribing_overlay(app);
+        if is_refine {
+            show_refining_overlay(app);
+        } else {
+            show_transcribing_overlay(app);
+        }
 
         // Unmute before playing audio feedback so the stop sound is audible
         rm.remove_mute();
@@ -709,7 +895,10 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
 
+        PIPELINE_BUSY.store(true, Ordering::SeqCst);
+
         tauri::async_runtime::spawn(async move {
+            let _busy = BusyGuard;
             let binding_id = binding_id.clone(); // Clone for the inner async task
             debug!(
                 "Starting async transcription task for binding: {}",
@@ -717,138 +906,208 @@ impl ShortcutAction for TranscribeAction {
             );
 
             let stop_recording_time = Instant::now();
-            if let Some(samples) = rm.stop_recording(&binding_id) {
-                debug!(
-                    "Recording stopped and samples retrieved in {:?}, sample count: {}",
-                    stop_recording_time.elapsed(),
-                    samples.len()
-                );
+            let samples = match rm.stop_recording(&binding_id) {
+                Some(samples) => samples,
+                None => {
+                    debug!("No samples retrieved from recording stop");
+                    utils::hide_recording_overlay(&ah);
+                    change_tray_icon(&ah, TrayIconState::Idle);
+                    return;
+                }
+            };
+            debug!(
+                "Recording stopped and samples retrieved in {:?}, sample count: {}",
+                stop_recording_time.elapsed(),
+                samples.len()
+            );
 
-                let settings = get_settings(&ah);
-                
-                let transcription_time = Instant::now();
-                let samples_clone = samples.clone(); // Clone for history saving
-                
-                // Use either online or local transcription based on settings
-                let transcription_result: Result<String, String> = if settings.use_online_provider {
-                    // Online transcription
-                    debug!("Using online provider for transcription");
-                    if let Some(provider) = get_online_transcription_provider(&settings) {
-                        let language = if settings.selected_language == "auto" {
-                            None
-                        } else {
-                            Some(settings.selected_language.clone())
-                        };
-                        let translate = settings.translate_to_english;
-                        transcribe_online(provider, samples, language, translate)
-                            .await
-                            .map_err(|e| format!("Online transcription failed: {}", e))
+            let settings = get_settings(&ah);
+
+            let transcription_time = Instant::now();
+            let samples_clone = samples.clone(); // Clone for history saving
+
+            // Use either online or local transcription based on settings
+            let transcription_result: Result<String, String> = if settings.use_online_provider {
+                debug!("Using online provider for transcription");
+                if let Some(provider) = get_online_transcription_provider(&settings) {
+                    let language = if settings.selected_language == "auto" {
+                        None
                     } else {
-                        Err("Online provider not configured properly".to_string())
-                    }
+                        Some(settings.selected_language.clone())
+                    };
+                    let translate = settings.translate_to_english;
+                    transcribe_online(provider, samples, language, translate)
+                        .await
+                        .map_err(|e| format!("Online transcription failed: {}", e))
                 } else {
-                    // Local transcription
-                    debug!("Using local model for transcription");
-                    tm.transcribe(samples).map_err(|e| e.to_string())
-                };
-
-                match transcription_result {
-                    Ok(transcription) => {
-                        debug!(
-                            "Transcription completed in {:?}: '{}'",
-                            transcription_time.elapsed(),
-                            transcription
-                        );
-                        if !transcription.is_empty() {
-                            let mut final_text = transcription.clone();
-                            let mut post_processed_text: Option<String> = None;
-                            let mut post_process_prompt: Option<String> = None;
-
-                            // First, check if Chinese variant conversion is needed
-                            if let Some(converted_text) =
-                                maybe_convert_chinese_variant(&settings, &transcription).await
-                            {
-                                final_text = converted_text.clone();
-                                post_processed_text = Some(converted_text);
-                            }
-                            // Then apply regular post-processing if enabled
-                            else if let Some(processed_text) =
-                                maybe_post_process_transcription(&settings, &transcription).await
-                            {
-                                final_text = processed_text.clone();
-                                post_processed_text = Some(processed_text);
-
-                                // Get the prompt that was used
-                                if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
-                                    if let Some(prompt) = settings
-                                        .post_process_prompts
-                                        .iter()
-                                        .find(|p| &p.id == prompt_id)
-                                    {
-                                        post_process_prompt = Some(prompt.prompt.clone());
-                                    }
-                                }
-                            }
-
-                            // Save to history with post-processed text and prompt
-                            let hm_clone = Arc::clone(&hm);
-                            let transcription_for_history = transcription.clone();
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e) = hm_clone
-                                    .save_transcription(
-                                        samples_clone,
-                                        transcription_for_history,
-                                        post_processed_text,
-                                        post_process_prompt,
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to save transcription to history: {}", e);
-                                }
-                            });
-
-                            // Paste the final text (either processed or original)
-                            let ah_clone = ah.clone();
-                            let paste_time = Instant::now();
-                            ah.run_on_main_thread(move || {
-                                match utils::paste(final_text, ah_clone.clone()) {
-                                    Ok(()) => debug!(
-                                        "Text pasted successfully in {:?}",
-                                        paste_time.elapsed()
-                                    ),
-                                    Err(e) => error!("Failed to paste transcription: {}", e),
-                                }
-                                // Hide the overlay after transcription is complete
-                                utils::hide_recording_overlay(&ah_clone);
-                                change_tray_icon(&ah_clone, TrayIconState::Idle);
-                            })
-                            .unwrap_or_else(|e| {
-                                error!("Failed to run paste on main thread: {:?}", e);
-                                utils::hide_recording_overlay(&ah);
-                                change_tray_icon(&ah, TrayIconState::Idle);
-                            });
-                        } else {
-                            utils::hide_recording_overlay(&ah);
-                            change_tray_icon(&ah, TrayIconState::Idle);
-                        }
-                    }
-                    Err(err) => {
-                        error!("Transcription error: {}", err);
-                        utils::hide_recording_overlay(&ah);
-                        change_tray_icon(&ah, TrayIconState::Idle);
-                    }
+                    Err("Online provider is not configured. Add an API key under Online Providers.".to_string())
                 }
             } else {
-                debug!("No samples retrieved from recording stop");
+                debug!("Using local model for transcription");
+                tm.transcribe(samples).map_err(|e| e.to_string())
+            };
+
+            let transcription = match transcription_result {
+                Ok(t) => t,
+                Err(err) => {
+                    fail_and_reset(&ah, "Transcription failed", &err);
+                    return;
+                }
+            };
+
+            debug!(
+                "Transcription completed in {:?} ({} chars)",
+                transcription_time.elapsed(),
+                transcription.chars().count()
+            );
+
+            if transcription.trim().is_empty() {
+                if is_refine {
+                    notify::report_error(&ah, "Refine", "No instruction was heard. The selection was left unchanged.");
+                }
                 utils::hide_recording_overlay(&ah);
                 change_tray_icon(&ah, TrayIconState::Idle);
+                return;
             }
+
+            let mut final_text = transcription.clone();
+            let mut post_processed_text: Option<String> = None;
+            let mut post_process_prompt: Option<String> = None;
+            let mut replace_target: Option<String> = None;
+
+            if let Some(selected) = selected_text {
+                match refine_selected_text(&settings, &selected, &transcription).await {
+                    Ok(refined) => {
+                        let cleaned = strip_em_dashes(&refined);
+                        final_text = cleaned.clone();
+                        post_processed_text = Some(cleaned);
+                        post_process_prompt = Some(format!("[refine] {}", transcription));
+                        replace_target = Some(selected);
+                    }
+                    Err(err) => {
+                        fail_and_reset(&ah, "Refine failed", &err);
+                        return;
+                    }
+                }
+            } else if let Some(converted_text) =
+                maybe_convert_chinese_variant(&settings, &transcription).await
+            {
+                final_text = converted_text.clone();
+                post_processed_text = Some(converted_text);
+            } else if settings.post_process_enabled {
+                match maybe_post_process_transcription(&settings, &transcription).await {
+                    Ok(Some(processed_text)) => {
+                        final_text = processed_text.clone();
+                        post_processed_text = Some(processed_text);
+                        if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
+                            if let Some(prompt) = settings
+                                .post_process_prompts
+                                .iter()
+                                .find(|p| &p.id == prompt_id)
+                            {
+                                post_process_prompt = Some(prompt.prompt.clone());
+                            }
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        warn!("Post-processing failed, pasting raw transcription: {}", err);
+                        notify::report_error(
+                            &ah,
+                            "Post-processing failed",
+                            &format!("{} The raw transcription was pasted instead.", err),
+                        );
+                    }
+                }
+            }
+
+            // Save to history with post-processed text and prompt
+            let hm_clone = Arc::clone(&hm);
+            let transcription_for_history = transcription.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = hm_clone
+                    .save_transcription(
+                        samples_clone,
+                        transcription_for_history,
+                        post_processed_text,
+                        post_process_prompt,
+                    )
+                    .await
+                {
+                    error!("Failed to save transcription to history: {}", e);
+                }
+            });
+
+            // Paste the final text (either processed or original)
+            let ah_clone = ah.clone();
+            let paste_time = Instant::now();
+            ah.run_on_main_thread(move || {
+                let result = match replace_target.as_deref() {
+                    Some(expected) => utils::paste_over_selection(expected, final_text, &ah_clone).map(|replaced| {
+                        if !replaced {
+                            notify::report_error(
+                                &ah_clone,
+                                "Refine",
+                                "Could not re-select the original text, so the result was inserted at the cursor instead of replacing it.",
+                            );
+                        }
+                    }),
+                    None => utils::paste(final_text, ah_clone.clone()),
+                };
+                match result {
+                    Ok(()) => debug!(
+                        "Text pasted successfully in {:?}",
+                        paste_time.elapsed()
+                    ),
+                    Err(e) => notify::report_error(&ah_clone, "Paste failed", &e),
+                }
+                // Hide the overlay after transcription is complete
+                utils::hide_recording_overlay(&ah_clone);
+                change_tray_icon(&ah_clone, TrayIconState::Idle);
+            })
+            .unwrap_or_else(|e| {
+                fail_and_reset(&ah, "Paste failed", &format!("Could not run paste on main thread: {:?}", e));
+            });
         });
 
         debug!(
             "TranscribeAction::stop completed in {:?}",
             stop_time.elapsed()
         );
+    }
+}
+
+/// Takes and clears the pending refine selection, if any.
+pub fn take_pending_selection(app: &AppHandle) -> Option<String> {
+    app.try_state::<RefineState>()
+        .and_then(|state| state.pending_selection.lock().ok().and_then(|mut p| p.take()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_em_dashes;
+
+    #[test]
+    fn replaces_em_dashes_between_words() {
+        assert_eq!(
+            strip_em_dashes("This is good \u{2014} really good."),
+            "This is good, really good."
+        );
+    }
+
+    #[test]
+    fn replaces_tight_em_dashes_and_double_hyphens() {
+        assert_eq!(strip_em_dashes("fast\u{2014}and cheap--too"), "fast, and cheap, too");
+    }
+
+    #[test]
+    fn handles_trailing_and_line_end_dashes() {
+        assert_eq!(strip_em_dashes("First point \u{2014}\nSecond \u{2014}"), "First point.\nSecond.");
+    }
+
+    #[test]
+    fn leaves_text_without_dashes_untouched() {
+        assert_eq!(strip_em_dashes("Plain text, with a hyphen-word."), "Plain text, with a hyphen-word.");
     }
 }
 

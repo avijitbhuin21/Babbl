@@ -10,6 +10,24 @@ interface UpdateCheckerProps {
   className?: string;
 }
 
+/** Turns an updater exception into a short, user-readable cause. */
+const describeUpdateError = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const lower = raw.toLowerCase();
+  if (lower.includes("404") || lower.includes("not found")) return "no release published";
+  if (lower.includes("signature") || lower.includes("pubkey") || lower.includes("minisign"))
+    return "signature mismatch";
+  if (
+    lower.includes("dns") ||
+    lower.includes("connect") ||
+    lower.includes("network") ||
+    lower.includes("timed out") ||
+    lower.includes("offline")
+  )
+    return "offline";
+  return raw.length > 60 ? `${raw.slice(0, 57)}...` : raw || "unknown error";
+};
+
 const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const { t } = useTranslation();
   // Update checking state
@@ -18,6 +36,8 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [showUpToDate, setShowUpToDate] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [availableVersion, setAvailableVersion] = useState<string | null>(null);
 
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
@@ -27,6 +47,15 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const isManualCheckRef = useRef(false);
   const downloadedBytesRef = useRef(0);
   const contentLengthRef = useRef(0);
+
+  const LAST_CHECK_KEY = "babbl.lastUpdateCheck";
+  const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+  /** Returns true if the last automatic check happened less than 24h ago. */
+  const checkedRecently = () => {
+    const last = Number(localStorage.getItem(LAST_CHECK_KEY) ?? 0);
+    return Number.isFinite(last) && Date.now() - last < AUTO_CHECK_INTERVAL_MS;
+  };
 
   useEffect(() => {
     // Wait for settings to load before doing anything
@@ -39,10 +68,13 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
       setIsChecking(false);
       setUpdateAvailable(false);
       setShowUpToDate(false);
+      setErrorText(null);
       return;
     }
 
-    checkForUpdates();
+    if (!checkedRecently()) {
+      checkForUpdates();
+    }
 
     // Listen for update check events
     const updateUnlisten = listen("check-for-updates", () => {
@@ -63,13 +95,17 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
     try {
       setIsChecking(true);
+      setErrorText(null);
       const update = await check();
+      localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
 
       if (update) {
         setUpdateAvailable(true);
+        setAvailableVersion(update.version);
         setShowUpToDate(false);
       } else {
         setUpdateAvailable(false);
+        setAvailableVersion(null);
 
         if (isManualCheckRef.current) {
           setShowUpToDate(true);
@@ -83,6 +119,7 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
       }
     } catch (error) {
       console.error("Failed to check for updates:", error);
+      setErrorText(describeUpdateError(error));
     } finally {
       setIsChecking(false);
       isManualCheckRef.current = false;
@@ -154,8 +191,12 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
           : t("footer.preparing");
     }
     if (isChecking) return t("footer.checkingUpdates");
+    if (errorText) return t("footer.updateError", { error: errorText, defaultValue: "Update check failed: {{error}}" });
     if (showUpToDate) return t("footer.upToDate");
-    if (updateAvailable) return t("footer.updateAvailableShort");
+    if (updateAvailable)
+      return availableVersion
+        ? t("footer.updateAvailableVersion", { version: availableVersion, defaultValue: "Update to v{{version}}" })
+        : t("footer.updateAvailableShort");
     return t("footer.checkForUpdates");
   };
 
@@ -169,7 +210,7 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const isUpdateDisabled = !updateChecksEnabled || isChecking || isInstalling;
   const isUpdateClickable =
-    !isUpdateDisabled && (updateAvailable || (!isChecking && !showUpToDate));
+    !isUpdateDisabled && (updateAvailable || errorText !== null || (!isChecking && !showUpToDate));
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
@@ -177,9 +218,12 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
         <button
           onClick={getUpdateStatusAction()}
           disabled={isUpdateDisabled}
+          title={errorText ?? undefined}
           className={`transition-colors disabled:opacity-50 tabular-nums ${updateAvailable
               ? "text-background-ui hover:text-background-ui/80 font-medium"
-              : "text-text/60 hover:text-text/80"
+              : errorText
+                ? "text-red-400 hover:text-red-300"
+                : "text-text/60 hover:text-text/80"
             }`}
         >
           {getUpdateStatusText()}

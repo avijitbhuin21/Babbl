@@ -11,6 +11,7 @@ mod input_hook;
 mod llm_client;
 mod llm_types;
 mod managers;
+mod notify;
 mod overlay;
 mod settings;
 mod shortcut;
@@ -38,13 +39,17 @@ use tauri::tray::TrayIconBuilder;
 use tauri::Emitter;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
+use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
 use crate::settings::get_settings;
 
 // Global atomic to store the file log level filter
 // We use u8 to store the log::LevelFilter as a number
-pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u8);
+pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Info as u8);
+
+pub const UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVFQkE0RjQ3OUYyRkJGMQpSV1R4Ky9KNTlLVHJEcHpQd1c3ZnhaKzVLVk1LUlhRM1hETWRUTWM0TTRFenNDSFR2Q2czdlNXZgo=";
+pub const UPDATER_ENDPOINT: &str =
+    "https://github.com/avijitbhuin21/Babbl/releases/latest/download/latest.json";
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
@@ -231,6 +236,8 @@ fn trigger_update_check(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    notify::install_panic_hook();
+
     // Parse console logging directives from RUST_LOG, falling back to info-level logging
     // when the variable is unset
     let console_filter = build_console_filter();
@@ -272,7 +279,12 @@ pub fn run() {
         shortcut::change_online_provider_id_setting,
         shortcut::change_online_provider_api_key_setting,
         shortcut::change_online_provider_model_setting,
+        shortcut::change_refine_enabled_setting,
+        shortcut::set_refine_provider,
+        shortcut::change_refine_model_setting,
         trigger_update_check,
+        commands::get_build_info,
+        commands::log_frontend,
         commands::cancel_operation,
         commands::get_app_dir_path,
         commands::get_app_settings,
@@ -331,8 +343,9 @@ pub fn run() {
     let mut builder = tauri::Builder::default().plugin(
         LogBuilder::new()
             .level(log::LevelFilter::Trace) // Set to most verbose level globally
-            .max_file_size(500_000)
-            .rotation_strategy(RotationStrategy::KeepOne)
+            .max_file_size(5_000_000)
+            .rotation_strategy(RotationStrategy::KeepSome(5))
+            .timezone_strategy(TimezoneStrategy::UseLocal)
             .clear_targets()
             .targets([
                 // Console output respects RUST_LOG environment variable
@@ -375,6 +388,7 @@ pub fn run() {
             Some(vec![]),
         ))
         .manage(Mutex::new(ShortcutToggleStates::default()))
+        .manage(actions::RefineState::default())
         .setup(move |app| {
             let settings = get_settings(&app.handle());
             let tauri_log_level: tauri_plugin_log::LogLevel = settings.log_level.into();
@@ -382,15 +396,13 @@ pub fn run() {
             // Store the file log level in the atomic for the filter to use
             FILE_LOG_LEVEL.store(file_log_level.to_level_filter() as u8, Ordering::Relaxed);
             let app_handle = app.handle().clone();
+            notify::init(&app_handle);
 
             initialize_core_logic(&app_handle);
 
             // Show main window only if not starting hidden
             if !settings.start_hidden {
-                if let Some(main_window) = app_handle.get_webview_window("main") {
-                    main_window.show().unwrap();
-                    main_window.set_focus().unwrap();
-                }
+                show_main_window(&app_handle);
             }
 
             Ok(())

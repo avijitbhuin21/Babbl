@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <div className="flex flex-col w-44 h-full bg-surface/30 items-center py-4 px-3">
+    <div className="flex flex-col w-44 h-full bg-surface/30 border-r border-border/30 items-center py-4 px-3">
       <img src={babblExtendedLogo} width={100} className="mb-6 opacity-90" alt="Babbl Logo" />
       <div className="flex flex-col w-full items-start gap-0.5">
         {availableSections.map((section) => {

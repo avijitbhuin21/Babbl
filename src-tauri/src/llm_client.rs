@@ -67,8 +67,34 @@ impl LlmClient {
             .choices
             .first()
             .and_then(|c| c.message.content.clone())
+            .map(|content| strip_reasoning_blocks(&content))
             .ok_or_else(|| "No content in response".to_string())
     }
+}
+
+/// Removes chain-of-thought blocks (<think>, <thinking>, <reasoning>, <analysis>) that reasoning models prepend to answers.
+pub fn strip_reasoning_blocks(text: &str) -> String {
+    const TAGS: [&str; 4] = ["think", "thinking", "reasoning", "analysis"];
+    let mut out = text.to_string();
+    for tag in TAGS {
+        let open = format!("<{}>", tag);
+        let close = format!("</{}>", tag);
+        loop {
+            let Some(start) = out.find(&open) else { break };
+            match out[start..].find(&close) {
+                Some(rel_end) => {
+                    let end = start + rel_end + close.len();
+                    out.replace_range(start..end, "");
+                }
+                None => {
+                    // Unterminated block: model was cut off mid-thought, drop everything from the tag on
+                    out.truncate(start);
+                    break;
+                }
+            }
+        }
+    }
+    out.trim().to_string()
 }
 
 /// Create an LLM client configured for the given provider

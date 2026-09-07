@@ -1,7 +1,7 @@
 use crate::input::{self, EnigoState};
 use crate::settings::{get_settings, ClipboardHandling, PasteMethod};
 use enigo::Enigo;
-use log::info;
+use log::{debug, info, warn};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -130,6 +130,116 @@ fn send_paste_via_dotool(paste_method: &PasteMethod) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Probes for selected text by sending a copy keystroke and diffing the clipboard; restores the clipboard afterwards.
+pub fn capture_selected_text(app_handle: &AppHandle) -> Result<Option<String>, String> {
+    let clipboard = app_handle.clipboard();
+    let original = clipboard.read_text().ok();
+
+    if let Err(e) = clipboard.clear() {
+        warn!("Failed to clear clipboard before selection probe: {}", e);
+    }
+
+    {
+        let enigo_state = app_handle
+            .try_state::<EnigoState>()
+            .ok_or("Enigo state not initialized")?;
+        let mut enigo = enigo_state
+            .0
+            .lock()
+            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        input::send_copy_ctrl_c(&mut enigo)?;
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(120));
+
+    let captured = clipboard
+        .read_text()
+        .ok()
+        .filter(|text| !text.trim().is_empty());
+
+    match &original {
+        Some(text) => {
+            if let Err(e) = clipboard.write_text(text) {
+                warn!("Failed to restore clipboard after selection probe: {}", e);
+            }
+        }
+        None => {
+            let _ = clipboard.clear();
+        }
+    }
+
+    debug!(
+        "Selection probe: {}",
+        captured
+            .as_ref()
+            .map(|t| format!("{} chars selected", t.chars().count()))
+            .unwrap_or_else(|| "no selection".to_string())
+    );
+
+    Ok(captured)
+}
+
+const MAX_RESELECT_CHARS: usize = 2_000;
+
+/// Number of caret positions the text occupies (CRLF counts as one).
+fn caret_positions(text: &str) -> usize {
+    text.chars().count() - text.matches("\r\n").count()
+}
+
+/// Pastes `text` over a selection that was captured earlier as `expected`.
+/// If the selection collapsed to its end in the meantime, re-selects it with Shift+Left and verifies
+/// before pasting; on verification failure pastes as a plain insert. Returns true if the text replaced the selection.
+pub fn paste_over_selection(expected: &str, text: String, app_handle: &AppHandle) -> Result<bool, String> {
+    let same = |probe: &Option<String>| probe.as_deref().map(str::trim) == Some(expected.trim());
+
+    let intact = capture_selected_text(app_handle)?;
+    debug!("Refine paste: selection intact before paste: {}", same(&intact));
+    if same(&intact) {
+        paste(text, app_handle.clone())?;
+        return Ok(true);
+    }
+
+    let count = caret_positions(expected);
+    if count == 0 || count > MAX_RESELECT_CHARS {
+        warn!("Refine paste: selection lost and too long to re-select ({} positions); inserting instead", count);
+        paste(text, app_handle.clone())?;
+        return Ok(false);
+    }
+
+    {
+        let enigo_state = app_handle
+            .try_state::<EnigoState>()
+            .ok_or("Enigo state not initialized")?;
+        let mut enigo = enigo_state
+            .0
+            .lock()
+            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        input::send_shift_left(&mut enigo, count)?;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+
+    let reselected = capture_selected_text(app_handle)?;
+    debug!("Refine paste: re-selected {} positions, matches original: {}", count, same(&reselected));
+    if same(&reselected) {
+        paste(text, app_handle.clone())?;
+        return Ok(true);
+    }
+
+    {
+        let enigo_state = app_handle
+            .try_state::<EnigoState>()
+            .ok_or("Enigo state not initialized")?;
+        let mut enigo = enigo_state
+            .0
+            .lock()
+            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        input::send_right(&mut enigo)?;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    paste(text, app_handle.clone())?;
+    Ok(false)
 }
 
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {

@@ -4,7 +4,7 @@
 //! enabling support for mouse button shortcuts that the standard Tauri global-shortcut
 //! plugin cannot handle.
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use once_cell::sync::Lazy;
 use rdev::{Button, Event, EventType, Key};
 use std::collections::{HashMap, HashSet};
@@ -172,49 +172,66 @@ impl InputHookManager {
         let listener_running = Arc::clone(&self.listener_running);
         
         thread::spawn(move || {
-            info!("Starting global input listener");
-            
-            let callback = move |event: Event| {
-                Self::handle_event(&state, &app_handle, event);
+            info!("Starting global input listener (grab mode)");
+
+            #[cfg(not(target_os = "linux"))]
+            let result = {
+                let callback = move |event: Event| -> Option<Event> {
+                    if Self::handle_event(&state, &app_handle, &event) {
+                        None
+                    } else {
+                        Some(event)
+                    }
+                };
+                rdev::grab(callback).map_err(|e| format!("{:?}", e))
             };
-            
-            if let Err(error) = rdev::listen(callback) {
-                error!("Error in global input listener: {:?}", error);
+
+            #[cfg(target_os = "linux")]
+            let result = {
+                let callback = move |event: Event| {
+                    Self::handle_event(&state, &app_handle, &event);
+                };
+                rdev::listen(callback).map_err(|e| format!("{:?}", e))
+            };
+
+            if let Err(error) = result {
+                error!("Error in global input listener: {}", error);
                 let mut running = listener_running.lock().unwrap();
                 *running = false;
             }
         });
     }
-    
-    /// Handle an input event from rdev
+
+    /// Handle an input event from rdev. Returns true when the event must be swallowed so it never
+    /// reaches the app under the cursor (mouse buttons that belong to a registered shortcut).
     fn handle_event(
         state: &Arc<RwLock<InputState>>,
         app_handle: &Arc<Mutex<Option<AppHandle>>>,
-        event: Event,
-    ) {
+        event: &Event,
+    ) -> bool {
         let element = match event.event_type {
             EventType::KeyPress(key) => {
                 let normalized = Self::normalize_key(key);
-                debug!("rdev KeyPress: {:?} -> normalized: {}", key, normalized);
+                trace!("rdev KeyPress: {:?} -> normalized: {}", key, normalized);
                 Some((InputElement::Key(normalized), true))
             }
             EventType::KeyRelease(key) => {
                 let normalized = Self::normalize_key(key);
-                debug!("rdev KeyRelease: {:?} -> normalized: {}", key, normalized);
+                trace!("rdev KeyRelease: {:?} -> normalized: {}", key, normalized);
                 Some((InputElement::Key(normalized), false))
             }
             EventType::ButtonPress(button) => {
                 if let Some(num) = Self::button_to_number(button) {
-                    debug!("rdev ButtonPress: {:?} -> button number: {}", button, num);
+                    trace!("rdev ButtonPress: {:?} -> button number: {}", button, num);
                     Some((InputElement::MouseButton(num), true))
                 } else {
-                    debug!("rdev ButtonPress: {:?} -> unmapped", button);
+                    trace!("rdev ButtonPress: {:?} -> unmapped", button);
                     None
                 }
             }
             EventType::ButtonRelease(button) => {
                 if let Some(num) = Self::button_to_number(button) {
-                    debug!("rdev ButtonRelease: {:?} -> button number: {}", button, num);
+                    trace!("rdev ButtonRelease: {:?} -> button number: {}", button, num);
                     Some((InputElement::MouseButton(num), false))
                 } else {
                     None
@@ -222,86 +239,94 @@ impl InputHookManager {
             }
             _ => None,
         };
-        
-        if let Some((input_element, is_press)) = element {
-            let mut state_guard = state.write().unwrap();
-            
-            if is_press {
-                state_guard.pressed_keys.insert(input_element.clone());
-                
-                // Log current pressed state
-                debug!("Currently pressed: {:?}", state_guard.pressed_keys);
-                
-                // Check for shortcut matches
-                let pressed = state_guard.pressed_keys.clone();
-                
-                // Find shortcuts that are matched but not yet active
-                let shortcuts_to_trigger: Vec<String> = state_guard
-                    .registered_shortcuts
-                    .values()
-                    .filter(|s| !state_guard.suspended_shortcuts.contains(&s.id))
-                    .filter(|s| s.requires_mouse) // Only handle mouse-containing shortcuts
-                    .filter(|s| s.is_matched(&pressed)) // Must be matched
-                    .filter(|s| !state_guard.active_shortcuts.contains(&s.id)) // Not already active
-                    .map(|s| s.id.clone())
-                    .collect();
-                
-                // Mark these shortcuts as active
-                for id in &shortcuts_to_trigger {
-                    state_guard.active_shortcuts.insert(id.clone());
-                }
-                
-                // Log for debugging
-                if !shortcuts_to_trigger.is_empty() {
-                    debug!("Shortcuts to trigger (newly matched): {:?}", shortcuts_to_trigger);
-                }
-                
-                drop(state_guard);
-                
-                // Trigger shortcuts that just became matched
-                for shortcut_id in shortcuts_to_trigger {
-                    info!("Shortcut matched! Triggering: {}", shortcut_id);
-                    Self::trigger_shortcut(app_handle, &shortcut_id, true);
-                }
-            } else {
-                // Key/button released - check if any active shortcuts should be released
-                let pressed_before = state_guard.pressed_keys.clone();
-                
-                // Remove from pressed keys
-                state_guard.pressed_keys.remove(&input_element);
-                let pressed_after = state_guard.pressed_keys.clone();
-                
-                debug!("After release, pressed: {:?}", pressed_after);
-                
-                // Find shortcuts that were active but are no longer matched
-                let shortcuts_to_release: Vec<String> = state_guard
-                    .active_shortcuts
-                    .iter()
-                    .filter(|id| {
-                        if let Some(shortcut) = state_guard.registered_shortcuts.get(*id) {
-                            // Was matched before, not matched now
-                            shortcut.is_matched(&pressed_before) && !shortcut.is_matched(&pressed_after)
-                        } else {
-                            false
-                        }
-                    })
-                    .cloned()
-                    .collect();
-                
-                // Remove from active shortcuts
-                for id in &shortcuts_to_release {
-                    state_guard.active_shortcuts.remove(id);
-                }
-                
-                drop(state_guard);
-                
-                // Trigger release for shortcuts that are no longer matched
-                for shortcut_id in shortcuts_to_release {
-                    debug!("Shortcut release triggered: {}", shortcut_id);
-                    Self::trigger_shortcut(app_handle, &shortcut_id, false);
-                }
+
+        let Some((input_element, is_press)) = element else {
+            return false;
+        };
+
+        let mut state_guard = state.write().unwrap();
+
+        // A mouse button that belongs to any registered, non-suspended shortcut is consumed so the
+        // app under the cursor never sees the click (which would move the caret / clear a selection).
+        let swallow = matches!(input_element, InputElement::MouseButton(_))
+            && state_guard
+                .registered_shortcuts
+                .values()
+                .filter(|s| !state_guard.suspended_shortcuts.contains(&s.id))
+                .any(|s| s.elements.contains(&input_element));
+
+        if is_press {
+            state_guard.pressed_keys.insert(input_element.clone());
+
+            trace!("Currently pressed: {:?}", state_guard.pressed_keys);
+
+            let pressed = state_guard.pressed_keys.clone();
+
+            let shortcuts_to_trigger: Vec<String> = state_guard
+                .registered_shortcuts
+                .values()
+                .filter(|s| !state_guard.suspended_shortcuts.contains(&s.id))
+                .filter(|s| s.requires_mouse)
+                .filter(|s| s.is_matched(&pressed))
+                .filter(|s| !state_guard.active_shortcuts.contains(&s.id))
+                .map(|s| s.id.clone())
+                .collect();
+
+            for id in &shortcuts_to_trigger {
+                state_guard.active_shortcuts.insert(id.clone());
+            }
+
+            if !shortcuts_to_trigger.is_empty() {
+                debug!("Shortcuts to trigger (newly matched): {:?}", shortcuts_to_trigger);
+            }
+
+            drop(state_guard);
+
+            for shortcut_id in shortcuts_to_trigger {
+                info!("Shortcut matched! Triggering: {}", shortcut_id);
+                Self::dispatch(app_handle, shortcut_id, true);
+            }
+        } else {
+            let pressed_before = state_guard.pressed_keys.clone();
+            state_guard.pressed_keys.remove(&input_element);
+            let pressed_after = state_guard.pressed_keys.clone();
+
+            trace!("After release, pressed: {:?}", pressed_after);
+
+            let shortcuts_to_release: Vec<String> = state_guard
+                .active_shortcuts
+                .iter()
+                .filter(|id| {
+                    if let Some(shortcut) = state_guard.registered_shortcuts.get(*id) {
+                        shortcut.is_matched(&pressed_before) && !shortcut.is_matched(&pressed_after)
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect();
+
+            for id in &shortcuts_to_release {
+                state_guard.active_shortcuts.remove(id);
+            }
+
+            drop(state_guard);
+
+            for shortcut_id in shortcuts_to_release {
+                debug!("Shortcut release triggered: {}", shortcut_id);
+                Self::dispatch(app_handle, shortcut_id, false);
             }
         }
+
+        swallow
+    }
+
+    /// Runs the shortcut action on its own thread so the low-level input hook returns immediately.
+    fn dispatch(app_handle: &Arc<Mutex<Option<AppHandle>>>, binding_id: String, is_press: bool) {
+        let app_handle = Arc::clone(app_handle);
+        thread::spawn(move || {
+            Self::trigger_shortcut(&app_handle, &binding_id, is_press);
+        });
     }
 
     

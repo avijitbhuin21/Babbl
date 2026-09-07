@@ -11,10 +11,12 @@ import { useSettings } from "../../../hooks/useSettings";
 import { VolumeSlider } from "../VolumeSlider";
 import { PostProcessingToggle } from "../PostProcessingToggle";
 import { OnlineProviderToggle } from "../OnlineProviderToggle";
+import { RefineToggle } from "../RefineToggle";
 
 export const GeneralSettings: React.FC = () => {
   const { t } = useTranslation();
-  const { audioFeedbackEnabled } = useSettings();
+  const { audioFeedbackEnabled, getSetting } = useSettings();
+  const refineEnabled = getSetting("refine_enabled") ?? true;
   return (
     <div className="w-full space-y-8">
       <SettingsGroup title={t("settings.general.title")}>
@@ -23,6 +25,10 @@ export const GeneralSettings: React.FC = () => {
         <PushToTalk descriptionMode="tooltip" grouped={true} />
         <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
         <OnlineProviderToggle descriptionMode="tooltip" grouped={true} />
+      </SettingsGroup>
+      <SettingsGroup title={t("settings.general.refine.title", "Refine selection")}>
+        <RefineToggle descriptionMode="tooltip" grouped={true} />
+        <BabblShortcut shortcutId="refine" grouped={true} disabled={!refineEnabled} />
       </SettingsGroup>
       <SettingsGroup title={t("settings.sound.title")}>
         <MicrophoneSelector descriptionMode="tooltip" grouped={true} />

@@ -112,6 +112,55 @@ pub fn send_paste_shift_insert(enigo: &mut Enigo) -> Result<(), String> {
     Ok(())
 }
 
+/// Sends a Ctrl+C or Cmd+C copy command using platform-specific virtual key codes.
+pub fn send_copy_ctrl_c(enigo: &mut Enigo) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let (modifier_key, c_key_code) = (Key::Meta, Key::Other(8));
+    #[cfg(target_os = "windows")]
+    let (modifier_key, c_key_code) = (Key::Control, Key::Other(0x43)); // VK_C
+    #[cfg(target_os = "linux")]
+    let (modifier_key, c_key_code) = (Key::Control, Key::Unicode('c'));
+
+    enigo
+        .key(modifier_key, enigo::Direction::Press)
+        .map_err(|e| format!("Failed to press modifier key: {}", e))?;
+    enigo
+        .key(c_key_code, enigo::Direction::Click)
+        .map_err(|e| format!("Failed to click C key: {}", e))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    enigo
+        .key(modifier_key, enigo::Direction::Release)
+        .map_err(|e| format!("Failed to release modifier key: {}", e))?;
+
+    Ok(())
+}
+
+/// Extends the selection leftwards by `count` characters using Shift+Left, to re-select text that collapsed to its end.
+pub fn send_shift_left(enigo: &mut Enigo, count: usize) -> Result<(), String> {
+    enigo
+        .key(Key::Shift, enigo::Direction::Press)
+        .map_err(|e| format!("Failed to press Shift key: {}", e))?;
+    for _ in 0..count {
+        enigo
+            .key(Key::LeftArrow, enigo::Direction::Click)
+            .map_err(|e| format!("Failed to click Left key: {}", e))?;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    enigo
+        .key(Key::Shift, enigo::Direction::Release)
+        .map_err(|e| format!("Failed to release Shift key: {}", e))?;
+    Ok(())
+}
+
+/// Presses Right once to collapse a selection back to its end.
+pub fn send_right(enigo: &mut Enigo) -> Result<(), String> {
+    enigo
+        .key(Key::RightArrow, enigo::Direction::Click)
+        .map_err(|e| format!("Failed to click Right key: {}", e))
+}
+
 /// Pastes text directly using the enigo text method.
 /// This tries to use system input methods if possible, otherwise simulates keystrokes one by one.
 pub fn paste_text_direct(enigo: &mut Enigo, text: &str) -> Result<(), String> {

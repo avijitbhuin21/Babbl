@@ -303,6 +303,16 @@ pub struct AppSettings {
     pub online_provider_custom_prompt: Option<String>,
     #[serde(default = "default_app_language")]
     pub app_language: String,
+    #[serde(default = "default_refine_enabled")]
+    pub refine_enabled: bool,
+    #[serde(default)]
+    pub refine_provider_id: String,
+    #[serde(default)]
+    pub refine_models: HashMap<String, String>,
+}
+
+fn default_refine_enabled() -> bool {
+    true
 }
 
 fn default_model() -> String {
@@ -345,7 +355,7 @@ fn default_debug_mode() -> bool {
 }
 
 fn default_log_level() -> LogLevel {
-    LogLevel::Debug
+    LogLevel::Info
 }
 
 fn default_word_correction_threshold() -> f64 {
@@ -572,6 +582,17 @@ pub fn get_default_settings() -> AppSettings {
         },
     );
     bindings.insert(
+        "refine".to_string(),
+        ShortcutBinding {
+            id: "refine".to_string(),
+            name: "Refine selection".to_string(),
+            description: "With text selected, speak an instruction to rewrite it. Same key as Transcribe by default."
+                .to_string(),
+            default_binding: default_shortcut.to_string(),
+            current_binding: default_shortcut.to_string(),
+        },
+    );
+    bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {
             id: "cancel".to_string(),
@@ -624,6 +645,9 @@ pub fn get_default_settings() -> AppSettings {
         online_provider_models: default_online_provider_models(),
         online_provider_custom_prompt: None,
         app_language: default_app_language(),
+        refine_enabled: default_refine_enabled(),
+        refine_provider_id: String::new(),
+        refine_models: HashMap::new(),
     }
 }
 
@@ -665,8 +689,13 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 let mut updated = false;
 
                 // Merge default bindings into existing settings
-                for (key, value) in default_settings.bindings {
+                for (key, mut value) in default_settings.bindings {
                     if !settings.bindings.contains_key(&key) {
+                        if key == "refine" {
+                            if let Some(transcribe) = settings.bindings.get("transcribe") {
+                                value.current_binding = transcribe.current_binding.clone();
+                            }
+                        }
                         debug!("Adding missing binding: {}", key);
                         settings.bindings.insert(key, value);
                         updated = true;

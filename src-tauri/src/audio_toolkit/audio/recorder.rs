@@ -83,8 +83,10 @@ impl AudioRecorder {
             let channels = config.channels() as usize;
 
             log::info!(
-                "Using device: {:?}\nSample rate: {}\nChannels: {}\nFormat: {:?}",
-                thread_device.name(),
+                "Using device: {} (sample rate: {}, channels: {}, format: {:?})",
+                thread_device
+                    .name()
+                    .unwrap_or_else(|_| "unknown".to_string()),
                 sample_rate,
                 channels,
                 config.sample_format()

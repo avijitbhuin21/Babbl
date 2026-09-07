@@ -1,8 +1,26 @@
 fn main() {
+    emit_git_hash();
+
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     build_apple_intelligence_bridge();
 
     tauri_build::build()
+}
+
+/// Exposes the short git commit hash as BABBL_GIT_HASH so the About page can show which build is running.
+fn emit_git_hash() {
+    let hash = std::process::Command::new("git")
+        .args(["rev-parse", "--short=9", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string());
+    println!("cargo:rustc-env=BABBL_GIT_HASH={}", hash);
+    println!("cargo:rerun-if-changed=../.git/HEAD");
+    println!("cargo:rerun-if-changed=../.git/refs");
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

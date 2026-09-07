@@ -8,12 +8,19 @@ import { syncLanguageFromSettings } from "@/i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
 
-type OverlayState = "recording" | "transcribing";
+type OverlayState = "recording" | "recording_refine" | "transcribing" | "refining" | "error";
+
+interface AppErrorPayload {
+  title: string;
+  message: string;
+}
 
 const RecordingOverlay: React.FC = () => {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [state, setState] = useState<OverlayState>("recording");
+  const [errorText, setErrorText] = useState<string>("");
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const [recordingIconSrc, setRecordingIconSrc] = useState<string>("");
@@ -50,6 +57,15 @@ const RecordingOverlay: React.FC = () => {
         setIsVisible(false);
       });
 
+      // Surface pipeline errors briefly in the overlay
+      const unlistenError = await listen<AppErrorPayload>("babbl://error", (event) => {
+        setErrorText(event.payload.title);
+        setState("error");
+        setIsVisible(true);
+        if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+        errorTimeoutRef.current = setTimeout(() => setIsVisible(false), 2500);
+      });
+
       // Listen for mic-level updates
       const unlistenLevel = await listen<number[]>("mic-level", (event) => {
         const newLevels = event.payload as number[];
@@ -68,6 +84,7 @@ const RecordingOverlay: React.FC = () => {
       return () => {
         unlistenShow();
         unlistenHide();
+        unlistenError();
         unlistenLevel();
       };
     };
@@ -75,23 +92,25 @@ const RecordingOverlay: React.FC = () => {
     setupEventListeners();
   }, []);
 
+  const isRecording = state === "recording" || state === "recording_refine";
+
   const getIcon = () => {
-    const iconSrc = state === "recording" ? recordingIconSrc : transcribingIconSrc;
+    const iconSrc = isRecording ? recordingIconSrc : transcribingIconSrc;
     if (!iconSrc) return null;
     return <img src={iconSrc} alt={state} className="overlay-icon" />;
   };
 
   return (
-    <div className={`recording-overlay ${isVisible ? "fade-in" : ""}`}>
+    <div className={`recording-overlay ${isVisible ? "fade-in" : ""} ${state === "error" ? "overlay-error" : ""}`}>
       <div className="overlay-left">{getIcon()}</div>
 
       <div className="overlay-middle">
-        {state === "recording" && (
+        {isRecording && (
           <div className="bars-container">
             {levels.map((v, i) => (
               <div
                 key={i}
-                className="bar"
+                className={`bar ${state === "recording_refine" ? "bar-refine" : ""}`}
                 style={{
                   height: `${Math.min(20, 4 + Math.pow(v, 0.7) * 16)}px`, // Cap at 20px max height
                   transition: "height 60ms ease-out, opacity 120ms ease-out",
@@ -104,10 +123,18 @@ const RecordingOverlay: React.FC = () => {
         {state === "transcribing" && (
           <div className="transcribing-text">{t("overlay.transcribing")}</div>
         )}
+        {state === "refining" && (
+          <div className="transcribing-text">{t("overlay.refining", "Refining...")}</div>
+        )}
+        {state === "error" && (
+          <div className="transcribing-text overlay-error-text" title={errorText}>
+            {errorText || t("overlay.error", "Error")}
+          </div>
+        )}
       </div>
 
       <div className="overlay-right">
-        {state === "recording" && (
+        {isRecording && (
           <div
             className="cancel-button"
             onClick={() => {

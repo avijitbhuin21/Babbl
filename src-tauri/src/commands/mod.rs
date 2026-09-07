@@ -14,6 +14,48 @@ pub fn cancel_operation(app: AppHandle) {
     cancel_current_operation(&app);
 }
 
+/// Writes a message from the webview into the app log so frontend failures are not lost.
+#[tauri::command]
+#[specta::specta]
+pub fn log_frontend(level: String, source: String, message: String) {
+    let message = message.chars().take(4000).collect::<String>();
+    match level.as_str() {
+        "error" => log::error!(target: "frontend", "[{}] {}", source, message),
+        "warn" => log::warn!(target: "frontend", "[{}] {}", source, message),
+        _ => log::info!(target: "frontend", "[{}] {}", source, message),
+    }
+}
+
+#[derive(serde::Serialize, specta::Type)]
+pub struct BuildInfo {
+    pub version: String,
+    pub git_hash: String,
+    pub updater_pubkey_fingerprint: String,
+    pub updater_endpoint: String,
+}
+
+/// Returns version, commit hash and updater identity so the user can tell which build is running.
+#[tauri::command]
+#[specta::specta]
+pub fn get_build_info(app: AppHandle) -> BuildInfo {
+    let version = app.package_info().version.to_string();
+    let pubkey = crate::UPDATER_PUBKEY;
+    let fingerprint = pubkey
+        .chars()
+        .rev()
+        .take(12)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<String>();
+    BuildInfo {
+        version,
+        git_hash: env!("BABBL_GIT_HASH").to_string(),
+        updater_pubkey_fingerprint: fingerprint,
+        updater_endpoint: crate::UPDATER_ENDPOINT.to_string(),
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_app_dir_path(app: AppHandle) -> Result<String, String> {

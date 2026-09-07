@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { useTranslation } from "react-i18next";
+import { Toaster, toast } from "sonner";
+import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
@@ -8,6 +10,11 @@ import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import { useSettings } from "./hooks/useSettings";
 import { commands } from "@/bindings";
 
+interface AppErrorPayload {
+  title: string;
+  message: string;
+}
+
 const renderSettingsContent = (section: SidebarSection) => {
   const ActiveComponent =
     SECTIONS_CONFIG[section]?.component || SECTIONS_CONFIG.general.component;
@@ -15,13 +22,25 @@ const renderSettingsContent = (section: SidebarSection) => {
 };
 
 function App() {
+  const { t } = useTranslation();
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [currentSection, setCurrentSection] =
     useState<SidebarSection>("general");
-  const { settings, updateSetting } = useSettings();
+  const { settings, updateSetting, isLoading } = useSettings();
 
   useEffect(() => {
-    checkOnboardingStatus();
+    if (isLoading) return;
+    checkOnboardingStatus(settings?.use_online_provider ?? false);
+  }, [isLoading, settings?.use_online_provider]);
+
+  useEffect(() => {
+    const unlisten = listen<AppErrorPayload>("babbl://error", (event) => {
+      const { title, message } = event.payload;
+      toast.error(title, { description: message, duration: 8000 });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   // Handle keyboard shortcuts for debug mode toggle
@@ -49,7 +68,11 @@ function App() {
     };
   }, [settings?.debug_mode, updateSetting]);
 
-  const checkOnboardingStatus = async () => {
+  const checkOnboardingStatus = async (useOnlineProvider: boolean) => {
+    if (useOnlineProvider) {
+      setShowOnboarding(false);
+      return;
+    }
     try {
       // Always check if they have any models available
       const result = await commands.hasAnyModelsAvailable();
@@ -75,7 +98,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      <Toaster />
+      <Toaster position="bottom-right" richColors closeButton theme="dark" />
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
@@ -85,7 +108,10 @@ function App() {
         {/* Scrollable content area with more breathing room */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col items-center py-8 px-6 gap-6 max-w-4xl mx-auto">
+            <div className="flex flex-col py-8 px-8 gap-6 max-w-3xl mx-auto w-full">
+              <h1 className="text-lg font-semibold text-text/90 tracking-tight">
+                {t(SECTIONS_CONFIG[currentSection]?.labelKey ?? SECTIONS_CONFIG.general.labelKey)}
+              </h1>
               <AccessibilityPermissions />
               {renderSettingsContent(currentSection)}
             </div>
