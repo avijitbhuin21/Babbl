@@ -668,7 +668,7 @@ pub async fn fetch_post_process_models(
     if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         {
-            return Ok(vec![APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string()]);
+            return Ok(vec![settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string()]);
         }
 
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
