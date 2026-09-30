@@ -1,10 +1,26 @@
 fn main() {
     emit_git_hash();
+    emit_vulkan_search_path();
 
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     build_apple_intelligence_bridge();
 
     tauri_build::build()
+}
+
+/// Adds the Vulkan SDK's import-library folder to the link path on Windows.
+/// transcribe-cpp-sys asks for `vulkan-1.lib` but only passes its absolute path as a raw
+/// link arg, which does not reach this crate's binaries, so link.exe cannot find it.
+fn emit_vulkan_search_path() {
+    println!("cargo:rerun-if-env-changed=VULKAN_SDK");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    let Ok(sdk) = std::env::var("VULKAN_SDK") else { return };
+    let lib = std::path::Path::new(&sdk).join("Lib");
+    if lib.join("vulkan-1.lib").exists() {
+        println!("cargo:rustc-link-search=native={}", lib.display());
+    }
 }
 
 /// Exposes the short git commit hash as BABBL_GIT_HASH so the About page can show which build is running.
