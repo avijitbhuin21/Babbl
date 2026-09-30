@@ -44,8 +44,16 @@ jobs:
         with:
           vulkan_version: latest
           install_runtime: false
-          cache: true
-          stripdown: true
+          # The stripped/cached SDK is missing Lib\vulkan-1.lib, which the linker needs.
+          cache: false
+          stripdown: false
+
+      - name: Check Vulkan import library
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:VULKAN_SDK\Lib\vulkan-1.lib")) { Write-Error "vulkan-1.lib not found under $env:VULKAN_SDK\Lib"; exit 1 }
+          "VULKAN_SDK=$env:VULKAN_SDK (vulkan-1.lib present)"
 
       - uses: dtolnay/rust-toolchain@stable
 

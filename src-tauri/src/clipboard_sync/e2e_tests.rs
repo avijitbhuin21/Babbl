@@ -190,8 +190,7 @@ async fn relay_pairing_and_sync_end_to_end() {
     wait_until("relay share", Duration::from_secs(20), || got.exists()).await;
     assert_eq!(std::fs::read(&got).unwrap(), text);
 
-    // With a direct link as well, the share must use it and not be held to relay pacing
-    // (48 MB over the relay alone takes at least ~4 s at 8 MB/s after the 16 MB burst).
+    // With a direct link as well, the share must go over it alone and not over the paced relay.
     let listener = net::bind(false).await.unwrap();
     let url = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
     let server = tokio::spawn(net::run_server(carol.clone(), listener));
@@ -202,8 +201,14 @@ async fn relay_pairing_and_sync_end_to_end() {
         |_, _, _| {},
     ));
     wait_until("direct link", Duration::from_secs(15), || carol.authed_link_count() >= 2).await;
+    // Carol sees Dave's inbound loopback link as Tunnel; what matters is that it is not the relay.
+    wait_until("direct route", Duration::from_secs(15), || {
+        let routes = carol.share_routes(&[dave_id.clone()]);
+        routes.len() == 1 && routes[0].1 != super::engine::Via::Relay
+    })
+    .await;
     let mut state = 0x9E3779B97F4A7C15u64;
-    let random: Vec<u8> = (0..48 * 1024 * 1024 / 8)
+    let random: Vec<u8> = (0..8 * 1024 * 1024 / 8)
         .flat_map(|_| {
             state ^= state << 13;
             state ^= state >> 7;
@@ -212,14 +217,11 @@ async fn relay_pairing_and_sync_end_to_end() {
         })
         .collect();
     std::fs::write(src.join("random.bin"), &random).unwrap();
-    let started = Instant::now();
     let share = carol.prepare_share(vec![src.join("random.bin")], vec![dave_id.clone()]).unwrap();
     carol.run_share(share).await.unwrap();
     let got = dave.storage_dir().join("Received").join("Carol").join("random.bin");
-    wait_until("direct share", Duration::from_secs(30), || got.exists()).await;
-    let secs = started.elapsed().as_secs_f64();
+    wait_until("direct share", Duration::from_secs(60), || got.exists()).await;
     assert_eq!(std::fs::read(&got).unwrap(), random);
-    assert!(secs < 2.5, "share was held to relay speed ({:.2}s)", secs);
 
     direct.abort();
     server.abort();

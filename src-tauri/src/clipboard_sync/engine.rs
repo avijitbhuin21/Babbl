@@ -1382,7 +1382,7 @@ impl Inner {
     }
 
     /// Picks the fastest direct link to each recipient (LAN first, relay last); one entry per link.
-    fn share_routes(&self, to: &[String]) -> Vec<(u64, Via)> {
+    pub(crate) fn share_routes(&self, to: &[String]) -> Vec<(u64, Via)> {
         let links = self.links.lock().unwrap();
         let peers = self.peers.lock().unwrap();
         let mut routes: Vec<(u64, Via)> = Vec::new();
