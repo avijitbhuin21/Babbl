@@ -1,0 +1,46 @@
+import React, { useEffect } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
+import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
+import Home from "./pages/Home";
+import Docs from "./pages/Docs";
+import DownloadPage from "./pages/Download";
+import Changelog from "./pages/Changelog";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import NotFound from "./pages/NotFound";
+
+const ScrollManager: React.FC = () => {
+  const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    if (hash) {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    window.scrollTo(0, 0);
+  }, [pathname, hash]);
+
+  return null;
+};
+
+const App: React.FC = () => (
+  <div className="flex min-h-screen flex-col">
+    <ScrollManager />
+    <Header />
+    <main className="flex-1">
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="/download" element={<DownloadPage />} />
+        <Route path="/changelog" element={<Changelog />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </main>
+    <Footer />
+  </div>
+);
+
+export default App;
