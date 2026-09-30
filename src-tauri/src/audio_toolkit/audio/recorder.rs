@@ -28,7 +28,11 @@ pub struct AudioRecorder {
     worker_handle: Option<std::thread::JoinHandle<()>>,
     vad: Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
     level_cb: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync + 'static>>,
+    frame_cb: Option<FrameCallback>,
 }
+
+/// Receives every 16 kHz frame while recording (before VAD), e.g. to feed live transcription.
+pub type FrameCallback = Arc<dyn Fn(&[f32]) + Send + Sync + 'static>;
 
 impl AudioRecorder {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
@@ -38,7 +42,14 @@ impl AudioRecorder {
             worker_handle: None,
             vad: None,
             level_cb: None,
+            frame_cb: None,
         })
+    }
+
+    /// Registers a callback that receives each resampled frame while recording.
+    pub fn with_frame_callback(mut self, cb: FrameCallback) -> Self {
+        self.frame_cb = Some(cb);
+        self
     }
 
     pub fn with_vad(mut self, vad: Box<dyn VoiceActivityDetector>) -> Self {
@@ -74,6 +85,7 @@ impl AudioRecorder {
         let vad = self.vad.clone();
         // Move the optional level callback into the worker thread
         let level_cb = self.level_cb.clone();
+        let frame_cb = self.frame_cb.clone();
 
         let worker = std::thread::spawn(move || {
             let config = AudioRecorder::get_preferred_config(&thread_device)
@@ -119,7 +131,7 @@ impl AudioRecorder {
             stream.play().expect("failed to start stream");
 
             // keep the stream alive while we process samples
-            run_consumer(sample_rate, vad, sample_rx, cmd_rx, level_cb);
+            run_consumer(sample_rate, vad, sample_rx, cmd_rx, level_cb, frame_cb);
             // stream is dropped here, after run_consumer returns
         });
 
@@ -247,6 +259,7 @@ fn run_consumer(
     sample_rx: mpsc::Receiver<Vec<f32>>,
     cmd_rx: mpsc::Receiver<Cmd>,
     level_cb: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync + 'static>>,
+    frame_cb: Option<FrameCallback>,
 ) {
     let mut frame_resampler = FrameResampler::new(
         in_sample_rate as usize,
@@ -304,6 +317,11 @@ fn run_consumer(
 
         // ---------- existing pipeline ------------------------------------ //
         frame_resampler.push(&raw, &mut |frame: &[f32]| {
+            if recording {
+                if let Some(cb) = &frame_cb {
+                    cb(frame);
+                }
+            }
             handle_frame(frame, recording, &vad, &mut processed_samples)
         });
 

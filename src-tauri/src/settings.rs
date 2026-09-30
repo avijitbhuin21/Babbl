@@ -266,6 +266,8 @@ pub struct AppSettings {
     pub word_correction_threshold: f64,
     #[serde(default = "default_history_limit")]
     pub history_limit: usize,
+    #[serde(default)]
+    pub history_limit_migrated: bool,
     #[serde(default = "default_recording_retention_period")]
     pub recording_retention_period: RecordingRetentionPeriod,
     #[serde(default)]
@@ -290,6 +292,12 @@ pub struct AppSettings {
     pub mute_while_recording: bool,
     #[serde(default)]
     pub append_trailing_space: bool,
+    /// Run local models on the GPU when one is available (falls back to CPU automatically).
+    #[serde(default = "default_true")]
+    pub use_gpu: bool,
+    /// Show text live in the overlay while recording with a streaming-capable model.
+    #[serde(default = "default_true")]
+    pub live_transcription: bool,
     // Online provider settings
     #[serde(default)]
     pub use_online_provider: bool,
@@ -309,6 +317,10 @@ pub struct AppSettings {
     pub refine_provider_id: String,
     #[serde(default)]
     pub refine_models: HashMap<String, String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_refine_enabled() -> bool {
@@ -363,7 +375,21 @@ fn default_word_correction_threshold() -> f64 {
 }
 
 fn default_history_limit() -> usize {
-    5
+    50
+}
+
+const LEGACY_DEFAULT_HISTORY_LIMIT: usize = 5;
+
+/// Moves users still on the old default history limit (5) to the new default, once.
+fn migrate_history_limit(settings: &mut AppSettings) -> bool {
+    if settings.history_limit_migrated {
+        return false;
+    }
+    if settings.history_limit == LEGACY_DEFAULT_HISTORY_LIMIT {
+        settings.history_limit = default_history_limit();
+    }
+    settings.history_limit_migrated = true;
+    true
 }
 
 fn default_recording_retention_period() -> RecordingRetentionPeriod {
@@ -626,6 +652,7 @@ pub fn get_default_settings() -> AppSettings {
         model_unload_timeout: ModelUnloadTimeout::Never,
         word_correction_threshold: default_word_correction_threshold(),
         history_limit: default_history_limit(),
+        history_limit_migrated: true,
         recording_retention_period: default_recording_retention_period(),
         paste_method: PasteMethod::default(),
         clipboard_handling: ClipboardHandling::default(),
@@ -638,6 +665,8 @@ pub fn get_default_settings() -> AppSettings {
         post_process_selected_prompt_id: None,
         mute_while_recording: false,
         append_trailing_space: false,
+        use_gpu: true,
+        live_transcription: true,
         // Online provider defaults
         use_online_provider: false,
         online_provider_id: default_online_provider_id(),
@@ -723,7 +752,9 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
+    let post_process_changed = ensure_post_process_defaults(&mut settings);
+    let history_changed = migrate_history_limit(&mut settings);
+    if post_process_changed || history_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 

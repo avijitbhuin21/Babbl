@@ -7,6 +7,9 @@ import ModelStatusButton from "./ModelStatusButton";
 import ModelDropdown from "./ModelDropdown";
 import DownloadProgressDisplay from "./DownloadProgressDisplay";
 
+// Must match DOWNLOAD_CANCELLED_MSG in src-tauri/src/managers/model.rs
+const DOWNLOAD_CANCELLED = "Download cancelled";
+
 interface ModelStateEvent {
   event_type: string;
   model_id?: string;
@@ -176,6 +179,24 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       },
     );
 
+    const downloadCancelledUnlisten = listen<string>(
+      "model-download-cancelled",
+      (event) => {
+        const modelId = event.payload;
+        setModelDownloadProgress((prev) => {
+          const next = new Map(prev);
+          next.delete(modelId);
+          return next;
+        });
+        setDownloadStats((prev) => {
+          const next = new Map(prev);
+          next.delete(modelId);
+          return next;
+        });
+        loadModels();
+      },
+    );
+
     // Listen for extraction events
     const extractionStartedUnlisten = listen<string>(
       "model-extraction-started",
@@ -240,6 +261,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       modelStateUnlisten.then((fn) => fn());
       downloadProgressUnlisten.then((fn) => fn());
       downloadCompleteUnlisten.then((fn) => fn());
+      downloadCancelledUnlisten.then((fn) => fn());
       extractionStartedUnlisten.then((fn) => fn());
       extractionCompletedUnlisten.then((fn) => fn());
       extractionFailedUnlisten.then((fn) => fn());
@@ -306,21 +328,48 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
     }
   };
 
+  const clearDownloadState = (modelId: string) => {
+    setModelDownloadProgress((prev) => {
+      const next = new Map(prev);
+      next.delete(modelId);
+      return next;
+    });
+    setDownloadStats((prev) => {
+      const next = new Map(prev);
+      next.delete(modelId);
+      return next;
+    });
+  };
+
   const handleModelDownload = async (modelId: string) => {
     try {
       setModelError(null);
       const result = await commands.downloadModel(modelId);
       if (result.status === "error") {
+        clearDownloadState(modelId);
+        loadModels();
+        if (result.error === DOWNLOAD_CANCELLED) {
+          loadCurrentModel();
+          return;
+        }
         const errorMsg = result.error;
         setModelError(errorMsg);
         setModelStatus("error");
         onError?.(errorMsg);
       }
     } catch (err) {
+      clearDownloadState(modelId);
       const errorMsg = `${err}`;
       setModelError(errorMsg);
       setModelStatus("error");
       onError?.(errorMsg);
+    }
+  };
+
+  const handleModelCancel = async (modelId: string) => {
+    const result = await commands.cancelDownload(modelId);
+    if (result.status === "error") {
+      onError?.(result.error);
     }
   };
 
@@ -420,6 +469,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
             downloadProgress={modelDownloadProgress}
             onModelSelect={handleModelSelect}
             onModelDownload={handleModelDownload}
+            onModelCancel={handleModelCancel}
             onModelDelete={handleModelDelete}
             onError={onError}
           />

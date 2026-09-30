@@ -4,6 +4,7 @@ mod apple_intelligence;
 mod audio_feedback;
 pub mod audio_toolkit;
 mod clipboard;
+mod clipboard_sync;
 mod commands;
 mod helpers;
 mod input;
@@ -13,6 +14,7 @@ mod llm_types;
 mod managers;
 mod notify;
 mod overlay;
+mod perf_monitor;
 mod settings;
 mod shortcut;
 mod signal_handle;
@@ -121,6 +123,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(enigo_state);
 
     // Initialize the managers
+    transcribe_cpp::init_logging();
     let recording_manager = Arc::new(
         AudioRecordingManager::new(app_handle).expect("Failed to initialize recording manager"),
     );
@@ -141,8 +144,11 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Initialize the keyboard shortcuts
     shortcut::init_shortcuts(app_handle);
+
+    clipboard_sync::init(app_handle);
     
     // Initialize the global input hook for mouse button shortcuts
+    perf_monitor::start();
     input_hook::init_input_hooks(app_handle);
 
     #[cfg(unix)]
@@ -194,7 +200,16 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 // Use centralized cancellation that handles all operations
                 cancel_current_operation(app);
             }
+            "send_clipboard" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = clipboard_sync::commands::send_now().await {
+                        notify::report_error(&app, "Clipboard sync", &e);
+                    }
+                });
+            }
             "quit" => {
+                clipboard_sync::shutdown();
                 app.exit(0);
             }
             _ => {}
@@ -263,7 +278,8 @@ pub fn run() {
         shortcut::change_post_process_api_key_setting,
         shortcut::change_post_process_model_setting,
         shortcut::set_post_process_provider,
-        shortcut::fetch_post_process_models,
+            shortcut::fetch_post_process_models,
+            shortcut::fetch_online_transcription_models,
         shortcut::add_post_process_prompt,
         shortcut::update_post_process_prompt,
         shortcut::delete_post_process_prompt,
@@ -272,7 +288,9 @@ pub fn run() {
         shortcut::suspend_binding,
         shortcut::resume_binding,
         shortcut::change_mute_while_recording_setting,
-        shortcut::change_append_trailing_space_setting,
+            shortcut::change_append_trailing_space_setting,
+            shortcut::change_use_gpu_setting,
+            shortcut::change_live_transcription_setting,
         shortcut::change_app_language_setting,
         shortcut::change_update_checks_setting,
         shortcut::change_use_online_provider_setting,
@@ -283,6 +301,22 @@ pub fn run() {
         shortcut::set_refine_provider,
         shortcut::change_refine_model_setting,
         trigger_update_check,
+        clipboard_sync::commands::clipboard_sync_get_status,
+        clipboard_sync::commands::clipboard_sync_set_config,
+        clipboard_sync::commands::clipboard_sync_set_device_name,
+        clipboard_sync::commands::clipboard_sync_start_pairing,
+        clipboard_sync::commands::clipboard_sync_stop_pairing,
+        clipboard_sync::commands::clipboard_sync_join,
+        clipboard_sync::commands::clipboard_sync_leave_group,
+        clipboard_sync::commands::clipboard_sync_forget_device,
+        clipboard_sync::commands::clipboard_sync_add_url,
+        clipboard_sync::commands::clipboard_sync_remove_url,
+        clipboard_sync::commands::clipboard_sync_send_now,
+        clipboard_sync::commands::clipboard_sync_set_peer_clipboard,
+        clipboard_sync::commands::share_pick_files,
+        clipboard_sync::commands::share_send_files,
+        clipboard_sync::commands::share_open_folder,
+        clipboard_sync::commands::share_clear_history,
         commands::get_build_info,
         commands::log_frontend,
         commands::cancel_operation,
@@ -302,7 +336,8 @@ pub fn run() {
         commands::models::set_active_model,
         commands::models::get_current_model,
         commands::models::get_transcription_model_status,
-        commands::models::is_model_loading,
+            commands::models::is_model_loading,
+            commands::models::get_transcription_device,
         commands::models::has_any_models_available,
         commands::models::has_any_models_or_downloads,
         commands::models::get_recommended_first_model,
@@ -381,6 +416,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(

@@ -99,6 +99,17 @@ pub fn install_panic_hook() {
         };
         let thread = std::thread::current();
         let thread_name = thread.name().unwrap_or("unnamed");
+        // tao 0.34 on Windows panics when a late window message arrives after the event loop
+        // was destroyed (quit / logoff / shutdown). The app is already exiting, so don't alarm the user.
+        if location.contains("tao") && message.contains("cannot move state from Destroyed") {
+            log::warn!(
+                "Ignoring window event-loop teardown panic on thread '{}' at {}: {}",
+                thread_name,
+                location,
+                message
+            );
+            return;
+        }
         report_error_global(
             "Internal error",
             &format!("Panic on thread '{}' at {}: {}", thread_name, location, message),

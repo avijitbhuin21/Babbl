@@ -10,7 +10,7 @@ use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{self, show_recording_overlay, show_transcribing_overlay, show_refining_overlay};
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +21,8 @@ use tauri::Manager;
 
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
-    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
+    /// Returns true if the action actually started (toggle callers use this to track state).
+    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) -> bool;
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
 }
 
@@ -754,16 +755,15 @@ fn fail_and_reset(app: &AppHandle, title: &str, message: &str) {
 }
 
 impl ShortcutAction for TranscribeAction {
-    fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
+    fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) -> bool {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
 
+        // Callers may hold the toggle-state lock here, so never lock it from inside start();
+        // returning false is what keeps the toggle inactive.
         if PIPELINE_BUSY.load(Ordering::SeqCst) {
             debug!("Ignoring shortcut press: previous transcription is still processing");
-            if let Ok(mut states) = app.state::<crate::ManagedToggleState>().lock() {
-                states.active_toggles.insert(binding_id.to_string(), false);
-            }
-            return;
+            return false;
         }
 
         let settings = get_settings(app);
@@ -772,7 +772,7 @@ impl ShortcutAction for TranscribeAction {
             Ok(selection) => selection,
             Err(message) => {
                 notify::report_error(app, "Refine", &message);
-                return;
+                return false;
             }
         };
         let is_refine = selection.is_some();
@@ -791,8 +791,13 @@ impl ShortcutAction for TranscribeAction {
         }
 
         let binding_id = binding_id.to_string();
+        let live = !settings.use_online_provider
+            && settings.live_transcription
+            && app
+                .state::<Arc<TranscriptionManager>>()
+                .selected_model_streams();
         change_tray_icon(app, TrayIconState::Recording);
-        show_recording_overlay(app, is_refine);
+        show_recording_overlay(app, is_refine, live);
 
         let rm = app.state::<Arc<AudioRecordingManager>>();
 
@@ -838,21 +843,31 @@ impl ShortcutAction for TranscribeAction {
         }
 
         if recording_started {
+            if live {
+                app.state::<Arc<TranscriptionManager>>().start_stream();
+            }
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
         } else {
             take_pending_selection(app);
-            fail_and_reset(
-                app,
-                "Recording",
-                "Could not start recording. Check that a microphone is connected and not in use by another app.",
-            );
+            let no_input_device = crate::audio_toolkit::list_input_devices()
+                .map(|devices| devices.is_empty())
+                .unwrap_or(false);
+            let message = if no_input_device {
+                "No microphone found. Connect a microphone (or enable it in Windows sound settings) and try again."
+            } else {
+                "Could not start recording. Check that a microphone is connected and not in use by another app."
+            };
+            fail_and_reset(app, "Recording", message);
         }
 
-        debug!(
-            "TranscribeAction::start completed in {:?}",
-            start_time.elapsed()
+        info!(
+            "[perf] recording start sequence took {:?} (started={}, online={})",
+            start_time.elapsed(),
+            recording_started,
+            settings.use_online_provider
         );
+        recording_started
     }
 
     fn stop(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
@@ -910,6 +925,7 @@ impl ShortcutAction for TranscribeAction {
                 Some(samples) => samples,
                 None => {
                     debug!("No samples retrieved from recording stop");
+                    tm.cancel_stream();
                     utils::hide_recording_overlay(&ah);
                     change_tray_icon(&ah, TrayIconState::Idle);
                     return;
@@ -920,6 +936,16 @@ impl ShortcutAction for TranscribeAction {
                 stop_recording_time.elapsed(),
                 samples.len()
             );
+
+            // VAD dropped everything (silence / accidental press): nothing to send to any engine.
+            if samples.is_empty() {
+                info!("No speech detected in recording; skipping transcription");
+                tm.cancel_stream();
+                take_pending_selection(&ah);
+                utils::hide_recording_overlay(&ah);
+                change_tray_icon(&ah, TrayIconState::Idle);
+                return;
+            }
 
             let settings = get_settings(&ah);
 
@@ -943,8 +969,17 @@ impl ShortcutAction for TranscribeAction {
                     Err("Online provider is not configured. Add an API key under Online Providers.".to_string())
                 }
             } else {
-                debug!("Using local model for transcription");
-                tm.transcribe(samples).map_err(|e| e.to_string())
+                match tm.finalize_stream() {
+                    Ok(Some(text)) => {
+                        debug!("Using live transcription result");
+                        Ok(text)
+                    }
+                    Ok(None) => {
+                        debug!("Using local model for transcription");
+                        tm.transcribe(samples).map_err(|e| e.to_string())
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
             };
 
             let transcription = match transcription_result {
@@ -1115,8 +1150,9 @@ mod tests {
 struct CancelAction;
 
 impl ShortcutAction for CancelAction {
-    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) -> bool {
         utils::cancel_current_operation(app);
+        true
     }
 
     fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
@@ -1128,13 +1164,14 @@ impl ShortcutAction for CancelAction {
 struct TestAction;
 
 impl ShortcutAction for TestAction {
-    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) {
+    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) -> bool {
         log::info!(
             "Shortcut ID '{}': Started - {} (App: {})",
             binding_id,
             shortcut_str,
             app.package_info().name
         );
+        true
     }
 
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) {

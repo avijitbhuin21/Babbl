@@ -25,6 +25,8 @@ fn paste_via_clipboard(
 
     let clipboard = app_handle.clipboard();
     let clipboard_content = clipboard.read_text().unwrap_or_default();
+    // The temporary transcript + restore must not be synced to other devices.
+    crate::clipboard_sync::suppress_local_changes(std::time::Duration::from_secs(2));
 
     clipboard
         .write_text(text)
@@ -134,6 +136,8 @@ fn send_paste_via_dotool(paste_method: &PasteMethod) -> Result<(), String> {
 
 /// Probes for selected text by sending a copy keystroke and diffing the clipboard; restores the clipboard afterwards.
 pub fn capture_selected_text(app_handle: &AppHandle) -> Result<Option<String>, String> {
+    // Clear + Ctrl+C probe + restore must not be synced to other devices.
+    crate::clipboard_sync::suppress_local_changes(std::time::Duration::from_secs(2));
     let clipboard = app_handle.clipboard();
     let original = clipboard.read_text().ok();
 

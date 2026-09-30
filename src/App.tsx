@@ -43,6 +43,23 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unlisten = listen<{ summary: string; peers: string[] }>("share-received", (event) => {
+      const { summary, peers } = event.payload;
+      toast.success(`Received ${summary}`, {
+        description: peers[0] ? `From ${peers[0]}` : undefined,
+        duration: 8000,
+        action: {
+          label: "Open",
+          onClick: () => commands.shareOpenFolder("received", null),
+        },
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Handle keyboard shortcuts for debug mode toggle
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

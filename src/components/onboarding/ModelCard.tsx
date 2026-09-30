@@ -53,6 +53,9 @@ const ModelCard: React.FC<ModelCardProps> = ({
             {displayName}
           </h3>
           <DownloadSize sizeMb={Number(model.size_mb)} />
+          {model.supports_streaming && (
+            <Badge variant="primary">{t("modelSelector.live", "Live")}</Badge>
+          )}
           {isFeatured && (
             <Badge variant="primary">{t("onboarding.recommended")}</Badge>
           )}

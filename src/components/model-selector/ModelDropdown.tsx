@@ -21,6 +21,7 @@ interface ModelDropdownProps {
   downloadProgress: Map<string, DownloadProgress>;
   onModelSelect: (modelId: string) => void;
   onModelDownload: (modelId: string) => void;
+  onModelCancel: (modelId: string) => void;
   onModelDelete: (modelId: string) => Promise<void>;
   onError?: (error: string) => void;
 }
@@ -31,6 +32,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
   downloadProgress,
   onModelSelect,
   onModelDownload,
+  onModelCancel,
   onModelDelete,
   onError,
 }) => {
@@ -182,7 +184,12 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   <div>
                     <div className="text-sm">
                       {getTranslatedModelName(model, t)}
-                      {model.id === "parakeet-tdt-0.6b-v3" && isFirstRun && (
+                      {model.supports_streaming && (
+                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded">
+                          {t("modelSelector.live", "Live")}
+                        </span>
+                      )}
+                      {model.id === "parakeet-unified-en-0.6b" && isFirstRun && (
                         <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded">
                           {t("onboarding.recommended")}
                         </span>
@@ -196,10 +203,27 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                       {formatModelSize(Number(model.size_mb))}
                     </div>
                   </div>
-                  <div className="text-xs text-background-ui tabular-nums">
-                    {isDownloading && progress
-                      ? `${Math.max(0, Math.min(100, Math.round(progress.percentage)))}%`
-                      : t("modelSelector.download")}
+                  <div className="flex flex-col items-end gap-1 text-xs text-background-ui tabular-nums">
+                    <span>
+                      {isDownloading && progress
+                        ? `${Math.max(0, Math.min(100, Math.round(progress.percentage)))}%`
+                        : Number(model.partial_size) > 0
+                          ? t("modelSelector.resume", "Resume")
+                          : t("modelSelector.download")}
+                    </span>
+                    {isDownloading && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onModelCancel(model.id);
+                        }}
+                        className="px-1.5 py-0.5 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      >
+                        {t("modelSelector.cancelDownload", "Cancel")}
+                      </button>
+                    )}
                   </div>
                 </div>
 

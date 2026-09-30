@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cog, FlaskConical, History, Info, Sparkles, Cloud } from "lucide-react";
+import { Cog, FlaskConical, History, Info, Sparkles, Cloud, ClipboardCopy, Share2 } from "lucide-react";
 import babblExtendedLogo from "../assets/Babbl_extended_logo_original.png";
 import BabblIcon from "./icons/BabblIcon";
 import { useSettings } from "../hooks/useSettings";
@@ -12,6 +12,8 @@ import {
   AboutSettings,
   PostProcessingSettings,
   OnlineProviderSettings,
+  ClipboardSettings,
+  ShareSettings,
 } from "./settings";
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
@@ -60,6 +62,18 @@ export const SECTIONS_CONFIG = {
     labelKey: "sidebar.history",
     icon: History,
     component: HistorySettings,
+    enabled: () => true,
+  },
+  clipboard: {
+    labelKey: "sidebar.clipboard",
+    icon: ClipboardCopy,
+    component: ClipboardSettings,
+    enabled: () => true,
+  },
+  share: {
+    labelKey: "sidebar.share",
+    icon: Share2,
+    component: ShareSettings,
     enabled: () => true,
   },
   debug: {

@@ -127,6 +127,9 @@ fn create_audio_recorder(
     let recorder = AudioRecorder::new()
         .map_err(|e| anyhow::anyhow!("Failed to create AudioRecorder: {}", e))?
         .with_vad(Box::new(smoothed_vad))
+        .with_frame_callback(std::sync::Arc::new(
+            crate::managers::transcription::feed_live_frame,
+        ))
         .with_level_callback({
             let app_handle = app_handle.clone();
             move |levels| {
@@ -351,6 +354,7 @@ impl AudioRecordingManager {
                         binding_id: binding_id.to_string(),
                     };
                     debug!("Recording started for binding {binding_id}");
+                    crate::perf_monitor::recording_started();
                     return true;
                 }
             }
@@ -379,6 +383,7 @@ impl AudioRecordingManager {
             } if active == binding_id => {
                 *state = RecordingState::Idle;
                 drop(state);
+                crate::perf_monitor::recording_stopped("stopped");
 
                 let samples = if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
                     match rec.stop() {
@@ -428,6 +433,7 @@ impl AudioRecordingManager {
         if let RecordingState::Recording { .. } = *state {
             *state = RecordingState::Idle;
             drop(state);
+            crate::perf_monitor::recording_stopped("cancelled");
 
             if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
                 let _ = rec.stop(); // Discard the result

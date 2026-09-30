@@ -15,10 +15,23 @@ interface AppErrorPayload {
   message: string;
 }
 
+interface OverlayLayout {
+  live: boolean;
+  top: boolean;
+}
+
+interface StreamText {
+  committed: string;
+  tentative: string;
+}
+
 const RecordingOverlay: React.FC = () => {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [state, setState] = useState<OverlayState>("recording");
+  const [layout, setLayout] = useState<OverlayLayout>({ live: false, top: false });
+  const [liveText, setLiveText] = useState<StreamText>({ committed: "", tentative: "" });
+  const liveTextRef = useRef<HTMLDivElement>(null);
   const [errorText, setErrorText] = useState<string>("");
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
@@ -48,8 +61,19 @@ const RecordingOverlay: React.FC = () => {
         // Sync language from settings each time overlay is shown
         await syncLanguageFromSettings();
         const overlayState = event.payload as OverlayState;
+        if (overlayState === "recording" || overlayState === "recording_refine") {
+          setLiveText({ committed: "", tentative: "" });
+        }
         setState(overlayState);
         setIsVisible(true);
+      });
+
+      const unlistenLayout = await listen<OverlayLayout>("overlay-layout", (event) => {
+        setLayout(event.payload);
+      });
+
+      const unlistenStream = await listen<StreamText>("stream-text", (event) => {
+        setLiveText(event.payload);
       });
 
       // Listen for hide-overlay event from Rust
@@ -83,6 +107,8 @@ const RecordingOverlay: React.FC = () => {
       // Cleanup function
       return () => {
         unlistenShow();
+        unlistenLayout();
+        unlistenStream();
         unlistenHide();
         unlistenError();
         unlistenLevel();
@@ -94,13 +120,28 @@ const RecordingOverlay: React.FC = () => {
 
   const isRecording = state === "recording" || state === "recording_refine";
 
+  useEffect(() => {
+    const el = liveTextRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [liveText]);
+
   const getIcon = () => {
     const iconSrc = isRecording ? recordingIconSrc : transcribingIconSrc;
     if (!iconSrc) return null;
     return <img src={iconSrc} alt={state} className="overlay-icon" />;
   };
 
+  const showLive = layout.live && isRecording;
+  const hasLiveText = liveText.committed.trim() !== "" || liveText.tentative.trim() !== "";
+
   return (
+    <div className={`overlay-root ${layout.live ? "overlay-live" : ""} ${layout.top ? "overlay-top" : ""}`}>
+      {showLive && (
+        <div className={`live-text ${isVisible && hasLiveText ? "fade-in" : ""}`} ref={liveTextRef}>
+          <span className="live-committed">{liveText.committed}</span>
+          <span className="live-tentative">{liveText.tentative}</span>
+        </div>
+      )}
     <div className={`recording-overlay ${isVisible ? "fade-in" : ""} ${state === "error" ? "overlay-error" : ""}`}>
       <div className="overlay-left">{getIcon()}</div>
 
@@ -145,6 +186,7 @@ const RecordingOverlay: React.FC = () => {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

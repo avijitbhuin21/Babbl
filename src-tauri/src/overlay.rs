@@ -27,6 +27,9 @@ tauri_panel! {
 
 const OVERLAY_WIDTH: f64 = 172.0;
 const OVERLAY_HEIGHT: f64 = 36.0;
+/// Overlay size while a streaming model shows live text above/below the pill.
+const LIVE_OVERLAY_WIDTH: f64 = 520.0;
+const LIVE_OVERLAY_HEIGHT: f64 = 124.0;
 
 #[cfg(target_os = "macos")]
 const OVERLAY_TOP_OFFSET: f64 = 46.0;
@@ -107,6 +110,12 @@ fn is_mouse_within_monitor(
 }
 
 fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
+    calculate_overlay_position_for(app_handle, OVERLAY_WIDTH, OVERLAY_HEIGHT)
+}
+
+/// Window origin for an overlay of the given size; the pill keeps its usual screen spot and the
+/// extra (live text) area grows away from the screen edge.
+fn calculate_overlay_position_for(app_handle: &AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
     if let Some(monitor) = get_monitor_with_cursor(app_handle) {
         let work_area = monitor.work_area();
         let scale = monitor.scale_factor();
@@ -117,12 +126,12 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
 
         let settings = settings::get_settings(app_handle);
 
-        let x = work_area_x + (work_area_width - OVERLAY_WIDTH) / 2.0;
+        let x = work_area_x + (work_area_width - width) / 2.0;
         let y = match settings.overlay_position {
             OverlayPosition::Top => work_area_y + OVERLAY_TOP_OFFSET,
             OverlayPosition::Bottom | OverlayPosition::None => {
                 // don't subtract the overlay height it puts it too far up
-                work_area_y + work_area_height - OVERLAY_BOTTOM_OFFSET
+                work_area_y + work_area_height - OVERLAY_BOTTOM_OFFSET - (height - OVERLAY_HEIGHT)
             }
         };
 
@@ -205,8 +214,31 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
     }
 }
 
-/// Shows the recording overlay window with fade-in animation
-pub fn show_recording_overlay(app_handle: &AppHandle, refine_mode: bool) {
+/// Payload telling the overlay whether to show the live text area and on which side of the pill.
+#[derive(Clone, serde::Serialize)]
+struct OverlayLayout {
+    live: bool,
+    /// True when the overlay sits at the top of the screen (text goes below the pill).
+    top: bool,
+}
+
+/// Resizes and repositions the overlay window for compact (pill only) or live-text mode.
+fn apply_overlay_layout(app_handle: &AppHandle, overlay_window: &tauri::webview::WebviewWindow, live: bool) {
+    let (w, h) = if live {
+        (LIVE_OVERLAY_WIDTH, LIVE_OVERLAY_HEIGHT)
+    } else {
+        (OVERLAY_WIDTH, OVERLAY_HEIGHT)
+    };
+    let _ = overlay_window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
+    if let Some((x, y)) = calculate_overlay_position_for(app_handle, w, h) {
+        let _ = overlay_window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+    }
+    let top = settings::get_settings(app_handle).overlay_position == OverlayPosition::Top;
+    let _ = overlay_window.emit("overlay-layout", OverlayLayout { live, top });
+}
+
+/// Shows the recording overlay window with fade-in animation; `live` makes room for streaming text.
+pub fn show_recording_overlay(app_handle: &AppHandle, refine_mode: bool, live: bool) {
     // Check if overlay should be shown based on position setting
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
@@ -214,11 +246,8 @@ pub fn show_recording_overlay(app_handle: &AppHandle, refine_mode: bool) {
     }
 
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
-        // Update position before showing to prevent flicker from position changes
-        if let Some((x, y)) = calculate_overlay_position(app_handle) {
-            let _ = overlay_window
-                .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
-        }
+        // Update size/position before showing to prevent flicker from position changes
+        apply_overlay_layout(app_handle, &overlay_window, live);
 
         let _ = overlay_window.show();
 
@@ -262,13 +291,10 @@ fn show_processing_overlay(app_handle: &AppHandle, state: &str) {
     }
 }
 
-/// Updates the overlay window position based on current settings
+/// Updates the overlay window position based on current settings (compact pill size)
 pub fn update_overlay_position(app_handle: &AppHandle) {
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
-        if let Some((x, y)) = calculate_overlay_position(app_handle) {
-            let _ = overlay_window
-                .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
-        }
+        apply_overlay_layout(app_handle, &overlay_window, false);
     }
 }
 
@@ -289,6 +315,7 @@ pub fn hide_recording_overlay(app_handle: &AppHandle) {
 }
 
 pub fn emit_levels(app_handle: &AppHandle, levels: &Vec<f32>) {
+    let started = std::time::Instant::now();
     // emit levels to main app
     let _ = app_handle.emit("mic-level", levels);
 
@@ -296,4 +323,5 @@ pub fn emit_levels(app_handle: &AppHandle, levels: &Vec<f32>) {
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
         let _ = overlay_window.emit("mic-level", levels);
     }
+    crate::perf_monitor::record_level_emit(started.elapsed());
 }

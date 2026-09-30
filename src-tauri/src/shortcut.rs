@@ -9,6 +9,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use crate::actions::ACTION_MAP;
 use crate::input_hook;
 use crate::managers::audio::AudioRecordingManager;
+use crate::managers::transcription::TranscriptionManager;
 use crate::settings::ShortcutBinding;
 use crate::settings::{
     self, get_settings, ClipboardHandling, LLMPrompt, OverlayPosition, PasteMethod, SoundTheme,
@@ -782,6 +783,13 @@ async fn fetch_models_manual(
     // Handle OpenAI format: { data: [ { id: "..." }, ... ] }
     if let Some(data) = parsed.get("data").and_then(|d| d.as_array()) {
         for entry in data {
+            // OpenRouter also lists image/audio generators; refine and post-processing need text out.
+            if provider.id == "openrouter"
+                && entry.get("architecture").is_some()
+                && !model_has_modality(entry, "output_modalities", "text")
+            {
+                continue;
+            }
             if let Some(id) = entry.get("id").and_then(|i| i.as_str()) {
                 models.push(id.to_string());
             } else if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
@@ -798,6 +806,61 @@ async fn fetch_models_manual(
         }
     }
 
+    Ok(models)
+}
+
+/// Returns true when an OpenRouter model entry lists `modality` under `architecture.<key>`.
+fn model_has_modality(entry: &serde_json::Value, key: &str, modality: &str) -> bool {
+    entry
+        .get("architecture")
+        .and_then(|a| a.get(key))
+        .and_then(|m| m.as_array())
+        .is_some_and(|mods| mods.iter().any(|m| m.as_str() == Some(modality)))
+}
+
+/// Lists transcription-capable (audio in, text out) models for an online transcription provider.
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_online_transcription_models(provider_id: String) -> Result<Vec<String>, String> {
+    if provider_id != "openrouter" {
+        return Err(format!(
+            "Dynamic model listing is not supported for provider '{}'",
+            provider_id
+        ));
+    }
+
+    // OpenRouter's model catalogue is public, so no API key is needed.
+    let response = reqwest::Client::new()
+        .get("https://openrouter.ai/api/v1/models")
+        .header("HTTP-Referer", "https://github.com/avijitbhuin21/Babbl")
+        .header("X-Title", "Babbl")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Model list request failed ({})", response.status()));
+    }
+
+    let parsed: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let mut models: Vec<String> = parsed
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|data| {
+            data.iter()
+                .filter(|entry| {
+                    model_has_modality(entry, "input_modalities", "audio")
+                        && model_has_modality(entry, "output_modalities", "text")
+                })
+                .filter_map(|entry| entry.get("id").and_then(|i| i.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    models.sort();
     Ok(models)
 }
 
@@ -831,6 +894,31 @@ pub fn change_mute_while_recording_setting(app: AppHandle, enabled: bool) -> Res
 pub fn change_append_trailing_space_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.append_trailing_space = enabled;
+    settings::write_settings(&app, settings);
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_use_gpu_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.use_gpu = enabled;
+    settings::write_settings(&app, settings);
+
+    // The compute backend is bound at load time, so drop the model; the next recording reloads it.
+    let tm = app.state::<Arc<TranscriptionManager>>();
+    if tm.is_model_loaded() && !tm.is_streaming() {
+        tm.unload_model().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_live_transcription_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.live_transcription = enabled;
     settings::write_settings(&app, settings);
 
     Ok(())
@@ -1113,8 +1201,8 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
                                 );
                                 *is_currently_active = false; // Update state to inactive
                             } else {
-                                action.start(ah, &binding_id_for_closure, &shortcut_string);
-                                *is_currently_active = true; // Update state to active
+                                *is_currently_active =
+                                    action.start(ah, &binding_id_for_closure, &shortcut_string);
                             }
                         }
                     }

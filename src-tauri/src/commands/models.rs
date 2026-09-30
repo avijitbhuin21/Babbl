@@ -94,9 +94,16 @@ pub async fn get_transcription_model_status(
 pub async fn is_model_loading(
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
 ) -> Result<bool, String> {
-    // Check if transcription manager has a loaded model
-    let current_model = transcription_manager.get_current_model();
-    Ok(current_model.is_none())
+    Ok(transcription_manager.is_loading())
+}
+
+/// Compute device the loaded local model runs on (e.g. "Vulkan: NVIDIA RTX 4070"), if loaded.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_transcription_device(
+    transcription_manager: State<'_, Arc<TranscriptionManager>>,
+) -> Result<Option<String>, String> {
+    Ok(transcription_manager.current_device())
 }
 
 #[tauri::command]
@@ -115,7 +122,7 @@ pub async fn has_any_models_or_downloads(
 ) -> Result<bool, String> {
     let models = model_manager.get_available_models();
     // Return true if any models are downloaded OR if any downloads are in progress
-    Ok(models.iter().any(|m| m.is_downloaded))
+    Ok(models.iter().any(|m| m.is_downloaded || m.is_downloading))
 }
 
 #[tauri::command]

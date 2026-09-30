@@ -31,6 +31,8 @@ pub fn cancel_current_operation(app: &AppHandle) {
     // Cancel any ongoing recording
     let audio_manager = app.state::<Arc<AudioRecordingManager>>();
     audio_manager.cancel_recording();
+    app.state::<Arc<crate::managers::transcription::TranscriptionManager>>()
+        .cancel_stream();
 
     crate::actions::take_pending_selection(app);
     crate::actions::PIPELINE_BUSY.store(false, std::sync::atomic::Ordering::SeqCst);

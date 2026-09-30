@@ -10,12 +10,6 @@ interface TranslateToEnglishProps {
   grouped?: boolean;
 }
 
-const unsupportedTranslationModels = [
-  "parakeet-tdt-0.6b-v2",
-  "parakeet-tdt-0.6b-v3",
-  "turbo",
-];
-
 // Default models for each online provider
 const DEFAULT_ONLINE_MODELS: Record<string, string> = {
   openai: "whisper-1",
@@ -40,8 +34,9 @@ export const TranslateToEnglish: React.FC<TranslateToEnglishProps> = React.memo(
     const isWhisperModel = onlineModel.toLowerCase().includes("whisper");
 
     // Translation is supported when using online providers, regardless of local model
+    const localModel = models.find((model) => model.id === currentModel);
     const isDisabledTranslation =
-      !useOnlineProvider && unsupportedTranslationModels.includes(currentModel);
+      !useOnlineProvider && !!localModel && !localModel.supports_translate;
 
     const description = useMemo(() => {
       if (isDisabledTranslation) {

@@ -55,7 +55,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   };
 
   const getRecommendedBadge = (modelId: string): boolean => {
-    return modelId === "parakeet-tdt-0.6b-v3";
+    return modelId === "parakeet-unified-en-0.6b";
   };
 
   return (

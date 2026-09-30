@@ -38,10 +38,13 @@ impl VoiceActivityDetector for SileroVad {
             );
         }
 
+        let started = std::time::Instant::now();
         let result = self
             .engine
             .compute(frame)
-            .map_err(|e| anyhow::anyhow!("Silero VAD error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Silero VAD error: {e}"));
+        crate::perf_monitor::record_vad(started.elapsed());
+        let result = result?;
 
         if result.prob > self.threshold {
             Ok(VadFrame::Speech(frame))

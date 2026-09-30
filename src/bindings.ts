@@ -165,6 +165,158 @@ async setPostProcessProvider(providerId: string) : Promise<Result<null, string>>
     else return { status: "error", error: e  as any };
 }
 },
+async clipboardSyncGetStatus() : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_get_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncSetConfig(config: SyncConfig) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_set_config", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncSetDeviceName(name: string) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_set_device_name", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncStartPairing() : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_start_pairing") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncStopPairing() : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_stop_pairing") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncJoin(method: string, target: string, code: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_join", { method, target, code }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncLeaveGroup() : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_leave_group") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncForgetDevice(deviceId: string) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_forget_device", { deviceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncAddUrl(url: string) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_add_url", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncRemoveUrl(url: string) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_remove_url", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clipboardSyncSendNow() : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_send_now") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Chooses whether clipboards are exchanged with one paired device (both directions).
+ */
+async clipboardSyncSetPeerClipboard(deviceId: string, enabled: boolean) : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clipboard_sync_set_peer_clipboard", { deviceId, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the native file picker; returns the chosen paths (empty when cancelled).
+ */
+async sharePickFiles() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("share_pick_files") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Starts sharing files with the given devices; returns a summary once the transfer has begun.
+ */
+async shareSendFiles(paths: string[], deviceIds: string[]) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("share_send_files", { paths, deviceIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the storage folder, a device's "Send to" folder, or a received-files folder.
+ * `which`: "root", "received", "sent", "outbox" (with `device_id`, or everyone when None).
+ */
+async shareOpenFolder(which: string, deviceId: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("share_open_folder", { which, deviceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Clears the finished entries from the share history list.
+ */
+async shareClearHistory() : Promise<Result<SyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("share_clear_history") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async fetchOnlineTranscriptionModels(providerId: string) : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fetch_online_transcription_models", { providerId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async fetchPostProcessModels(providerId: string) : Promise<Result<string[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("fetch_post_process_models", { providerId }) };
@@ -247,6 +399,33 @@ async changeMuteWhileRecordingSetting(enabled: boolean) : Promise<Result<null, s
 async changeAppendTrailingSpaceSetting(enabled: boolean) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("change_append_trailing_space_setting", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeUseGpuSetting(enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_use_gpu_setting", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeLiveTranscriptionSetting(enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_live_transcription_setting", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Compute device the loaded local model runs on (e.g. "Vulkan: NVIDIA RTX 4070"), if loaded.
+ */
+async getTranscriptionDevice() : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_transcription_device") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -684,17 +863,71 @@ async isLaptop() : Promise<Result<boolean, string>> {
 
 /** user-defined types **/
 
-export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: Partial<{ [key in string]: string }>; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; use_online_provider?: boolean; online_provider_id?: string; online_provider_api_keys?: Partial<{ [key in string]: string }>; online_provider_models?: Partial<{ [key in string]: string }>; online_provider_custom_prompt?: string | null; app_language?: string; refine_enabled?: boolean; refine_provider_id?: string; refine_models?: Partial<{ [key in string]: string }> }
+export type SyncConfig = { enabled: boolean; auto_send: boolean; lan: boolean; relay: boolean; relay_url: string; tunnel: boolean; sync_text: boolean; sync_images: boolean; sync_files: boolean; max_file_mb: number }
+export type SyncVia = "lan" | "tunnel" | "url" | "relay"
+export type SyncServiceStatus = { state: string; detail: string | null }
+export type SyncPeerStatus = { device_id: string; name: string; connected: boolean; via: SyncVia[]; last_seen_ms: number; 
+/**
+ * Clipboards are exchanged with this device.
+ */
+clipboard: boolean }
+export type SyncDiscoveredDevice = { device_id: string; name: string; address: string; same_group: boolean }
+export type SyncRemoteUrlStatus = { url: string; connected: boolean; error: string | null }
+export type SyncPairingInfo = { pin: string; invite_code: string | null; expires_ms: number }
+export type SyncActivity = { direction: string; summary: string; peer: string; at_ms: number }
+export type SyncTransferStatus = { id: string; 
+/**
+ * in | out
+ */
+direction: string; 
+/**
+ * clipboard | share
+ */
+kind: string; summary: string; peer: string; received: number; total: number }
+export type SyncShareRecord = { id: string; 
+/**
+ * sent | received
+ */
+direction: string; summary: string; files: string[]; 
+/**
+ * Sender (received) or recipients (sent), as device names.
+ */
+peers: string[]; peer_ids: string[]; delivered_to: string[]; 
+/**
+ * sending | sent | delivered | failed | received
+ */
+state: string; error: string | null; 
+/**
+ * Folder the received files were saved into.
+ */
+folder: string | null; at_ms: number }
+export type SyncStatus = { config: SyncConfig; device_id: string; device_name: string; in_group: boolean; group_fingerprint: string | null; peers: SyncPeerStatus[]; discovered: SyncDiscoveredDevice[]; lan: SyncServiceStatus; lan_port: number | null; tunnel: SyncServiceStatus; tunnel_url: string | null; relay: SyncServiceStatus; remote_urls: SyncRemoteUrlStatus[]; pairing: SyncPairingInfo | null; last_activity: SyncActivity | null; transfers: SyncTransferStatus[]; shares: SyncShareRecord[]; storage_dir: string }
+export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; history_limit_migrated?: boolean; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: Partial<{ [key in string]: string }>; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; 
+/**
+ * Run local models on the GPU when one is available (falls back to CPU automatically).
+ */
+use_gpu?: boolean; 
+/**
+ * Show text live in the overlay while recording with a streaming-capable model.
+ */
+live_transcription?: boolean; use_online_provider?: boolean; online_provider_id?: string; online_provider_api_keys?: Partial<{ [key in string]: string }>; online_provider_models?: Partial<{ [key in string]: string }>; online_provider_custom_prompt?: string | null; app_language?: string; refine_enabled?: boolean; refine_provider_id?: string; refine_models?: Partial<{ [key in string]: string }> }
 export type AudioDevice = { index: string; name: string; is_default: boolean }
 export type BindingResponse = { success: boolean; binding: ShortcutBinding | null; error: string | null }
 export type BuildInfo = { version: string; git_hash: string; updater_pubkey_fingerprint: string; updater_endpoint: string }
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
-export type EngineType = "Whisper" | "Parakeet"
 export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null }
 export type LLMPrompt = { id: string; name: string; prompt: string }
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
-export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number }
+export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; 
+/**
+ * Shows text live while recording (streaming-capable model).
+ */
+supports_streaming: boolean; supports_translate: boolean; supports_language_detect: boolean; 
+/**
+ * ISO codes the model accepts as a language hint; one entry means a single-language model.
+ */
+languages: string[]; accuracy_score: number; speed_score: number }
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_5"
 export type OverlayPosition = "none" | "top" | "bottom"

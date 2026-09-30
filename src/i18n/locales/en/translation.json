@@ -5,6 +5,8 @@
     "postProcessing": "Post Process",
     "cloudProviders": "Cloud Providers",
     "cloudModels": "Cloud Models",
+    "clipboard": "Clipboard",
+    "share": "Share",
     "providers": "Providers",
     "history": "History",
     "debug": "Debug",
@@ -23,19 +25,11 @@
     "models": {
       "small": {
         "name": "Whisper Small",
-        "description": "Fast and fairly accurate."
-      },
-      "medium": {
-        "name": "Whisper Medium",
-        "description": "Good accuracy, medium speed"
+        "description": "Fast and fairly accurate. 99 languages."
       },
       "turbo": {
         "name": "Whisper Turbo",
-        "description": "Balanced accuracy and speed."
-      },
-      "large": {
-        "name": "Whisper Large",
-        "description": "Good accuracy, but slow."
+        "description": "Accurate, 99 languages. Needs a decent CPU or GPU."
       },
       "parakeet-tdt-0.6b-v2": {
         "name": "Parakeet V2",
@@ -43,7 +37,7 @@
       },
       "parakeet-tdt-0.6b-v3": {
         "name": "Parakeet V3",
-        "description": "Fast and accurate"
+        "description": "Fast and accurate. 25 European languages."
       }
     },
     "errors": {
@@ -59,6 +53,9 @@
     "chooseModel": "Choose a Model",
     "active": "Active",
     "download": "Download",
+    "resume": "Resume",
+    "cancelDownload": "Cancel",
+    "live": "Live",
     "downloadSize": "Download size",
     "noModelsAvailable": "No models available",
     "extracting": "Extracting {{modelName}}...",
@@ -189,6 +186,15 @@
         "descriptionUnsupported": "Translation is not supported by the {{model}} model.",
         "descriptionOnlineWhisper": "Using {{model}} with native translation support. Audio will be translated directly to English.",
         "descriptionOnlineOther": "Using {{model}}. Translation is prompt-based and may vary in quality."
+      },
+      "liveTranscription": {
+        "label": "Live text while speaking",
+        "description": "With a Live model, show the words in the overlay as you speak. The final text is pasted when you stop."
+      },
+      "useGpu": {
+        "label": "GPU acceleration",
+        "description": "Run local models on your graphics card when available (Vulkan on Windows/Linux, Metal on macOS). Falls back to the CPU automatically.",
+        "runningOn": "Currently running on {{device}}."
       },
       "modelUnload": {
         "title": "Unload Model",

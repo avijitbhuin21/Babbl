@@ -177,7 +177,10 @@ impl InputHookManager {
             #[cfg(not(target_os = "linux"))]
             let result = {
                 let callback = move |event: Event| -> Option<Event> {
-                    if Self::handle_event(&state, &app_handle, &event) {
+                    let started = std::time::Instant::now();
+                    let swallow = Self::handle_event(&state, &app_handle, &event);
+                    crate::perf_monitor::record_hook(started.elapsed());
+                    if swallow {
                         None
                     } else {
                         Some(event)
@@ -189,7 +192,9 @@ impl InputHookManager {
             #[cfg(target_os = "linux")]
             let result = {
                 let callback = move |event: Event| {
+                    let started = std::time::Instant::now();
                     Self::handle_event(&state, &app_handle, &event);
+                    crate::perf_monitor::record_hook(started.elapsed());
                 };
                 rdev::listen(callback).map_err(|e| format!("{:?}", e))
             };
@@ -520,8 +525,7 @@ impl InputHookManager {
                             action.stop(app, binding_id, "mouse_shortcut");
                             *is_currently_active = false;
                         } else {
-                            action.start(app, binding_id, "mouse_shortcut");
-                            *is_currently_active = true;
+                            *is_currently_active = action.start(app, binding_id, "mouse_shortcut");
                         }
                     }
                 }

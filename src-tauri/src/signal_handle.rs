@@ -53,9 +53,9 @@ pub fn setup_signal_handler(app_handle: AppHandle, mut signals: Signals) {
                             debug!("SIGUSR2: Transcription stopped");
                         } else {
                             debug!("SIGUSR2: Starting transcription (currently inactive)");
-                            action.start(&app_handle_for_signal, binding_id, shortcut_string);
-                            *is_currently_active = true; // Update state to active
-                            info!("SIGUSR2: Transcription started");
+                            *is_currently_active =
+                                action.start(&app_handle_for_signal, binding_id, shortcut_string);
+                            info!("SIGUSR2: Transcription started: {}", *is_currently_active);
                         }
                     } else {
                         warn!("No action defined in ACTION_MAP for binding ID '{binding_id}'");

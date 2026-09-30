@@ -96,7 +96,9 @@ export const useModels = () => {
       if (result.status === "ok") {
         return true;
       } else {
-        setError(`Failed to download model: ${result.error}`);
+        if (result.error !== "Download cancelled") {
+          setError(`Failed to download model: ${result.error}`);
+        }
         setDownloadingModels((prev) => {
           const next = new Set(prev);
           next.delete(modelId);

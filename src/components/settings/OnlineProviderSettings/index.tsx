@@ -7,6 +7,7 @@ import { SettingContainer } from "../../ui/SettingContainer";
 import { Eye, EyeOff } from "lucide-react";
 import { Input } from "../../ui/Input";
 import { LlmPurposeSettings } from "./LlmPurposeSettings";
+import { commands } from "@/bindings";
 
 // Online provider configurations (removed SambaNova)
 const ONLINE_PROVIDERS: DropdownOption[] = [
@@ -60,16 +61,44 @@ export const OnlineProviderSettings: React.FC = () => {
     const [apiKeyInput, setApiKeyInput] = useState(savedApiKey);
     const [showApiKey, setShowApiKey] = useState(false);
 
+    const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
+
     // Reset local state when provider changes
     useEffect(() => {
         setApiKeyInput(savedApiKey);
         setShowApiKey(false);
     }, [selectedProviderId, savedApiKey]);
 
-    // Get model options for current provider
+    // Providers with a public model catalogue get their audio-capable models listed dynamically.
+    useEffect(() => {
+        if (selectedProviderId !== "openrouter" || fetchedModels[selectedProviderId]) return;
+        let cancelled = false;
+        commands.fetchOnlineTranscriptionModels(selectedProviderId).then((result) => {
+            if (cancelled) return;
+            if (result.status === "ok") {
+                setFetchedModels((prev) => ({ ...prev, [selectedProviderId]: result.data }));
+            } else {
+                console.error("Failed to fetch transcription models:", result.error);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedProviderId, fetchedModels]);
+
+    // Curated models first, then any other audio-capable models from the provider.
     const modelOptions = useMemo(() => {
-        return PROVIDER_MODELS[selectedProviderId] ?? [];
-    }, [selectedProviderId]);
+        const curated = PROVIDER_MODELS[selectedProviderId] ?? [];
+        const known = new Set(curated.map((o) => o.value));
+        const extra = (fetchedModels[selectedProviderId] ?? [])
+            .filter((id) => !known.has(id))
+            .map((id) => ({ value: id, label: id }));
+        const options = [...curated, ...extra];
+        if (savedModel && !options.some((o) => o.value === savedModel)) {
+            options.push({ value: savedModel, label: savedModel });
+        }
+        return options;
+    }, [selectedProviderId, fetchedModels, savedModel]);
 
     const handleProviderChange = async (providerId: string) => {
         await updateSetting("online_provider_id" as any, providerId);

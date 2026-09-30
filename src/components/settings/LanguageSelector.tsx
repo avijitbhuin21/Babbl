@@ -12,8 +12,6 @@ interface LanguageSelectorProps {
   grouped?: boolean;
 }
 
-const unsupportedModels = ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3"];
-
 // Default models for each online provider
 const DEFAULT_ONLINE_MODELS: Record<string, string> = {
   openai: "whisper-1",
@@ -21,13 +19,17 @@ const DEFAULT_ONLINE_MODELS: Record<string, string> = {
   gemini: "gemini-2.5-flash",
 };
 
+// The settings list uses script variants for Chinese; models report plain "zh".
+const baseLanguageCode = (code: string) =>
+  code === "zh-Hans" || code === "zh-Hant" ? "zh" : code;
+
 export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   descriptionMode = "tooltip",
   grouped = false,
 }) => {
   const { t } = useTranslation();
   const { getSetting, updateSetting, resetSetting, isUpdating, settings } = useSettings();
-  const { currentModel, loadCurrentModel } = useModels();
+  const { currentModel, loadCurrentModel, models } = useModels();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -40,8 +42,11 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const onlineProviderId = settings?.online_provider_id ?? "openai";
   const onlineModel = settings?.online_provider_models?.[onlineProviderId] ?? DEFAULT_ONLINE_MODELS[onlineProviderId] ?? "";
 
-  // Language selection is supported when using online providers, regardless of local model
-  const isUnsupported = !useOnlineProvider && unsupportedModels.includes(currentModel);
+  // Language selection is supported when using online providers, regardless of local model.
+  // Single-language local models have nothing to pick.
+  const localModel = models.find((model) => model.id === currentModel);
+  const isUnsupported =
+    !useOnlineProvider && !!localModel && localModel.languages.length <= 1;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -79,10 +84,17 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
 
   const filteredLanguages = useMemo(
     () =>
-      LANGUAGES.filter((language) =>
-        language.label.toLowerCase().includes(searchQuery.toLowerCase()),
-      ),
-    [searchQuery],
+      LANGUAGES.filter((language) => {
+        if (!useOnlineProvider && localModel) {
+          if (language.value === "auto") {
+            if (!localModel.supports_language_detect) return false;
+          } else if (!localModel.languages.includes(baseLanguageCode(language.value))) {
+            return false;
+          }
+        }
+        return language.label.toLowerCase().includes(searchQuery.toLowerCase());
+      }),
+    [searchQuery, useOnlineProvider, localModel],
   );
 
   const selectedLanguageName = isUnsupported

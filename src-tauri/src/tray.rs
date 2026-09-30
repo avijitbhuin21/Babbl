@@ -116,6 +116,17 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState) {
     .expect("failed to create check updates item");
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, quit_accelerator)
         .expect("failed to create quit item");
+    let sync_enabled = crate::clipboard_sync::engine()
+        .map(|e| e.config().enabled)
+        .unwrap_or(false);
+    let send_clipboard_i = MenuItem::with_id(
+        app,
+        "send_clipboard",
+        "Send Clipboard to Devices",
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create send clipboard item");
     let separator = || PredefinedMenuItem::separator(app).expect("failed to create separator");
 
     let menu = match state {
@@ -137,6 +148,20 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState) {
             )
             .expect("failed to create menu")
         }
+        TrayIconState::Idle if sync_enabled => Menu::with_items(
+            app,
+            &[
+                &version_i,
+                &separator(),
+                &send_clipboard_i,
+                &separator(),
+                &settings_i,
+                &check_updates_i,
+                &separator(),
+                &quit_i,
+            ],
+        )
+        .expect("failed to create menu"),
         TrayIconState::Idle => Menu::with_items(
             app,
             &[

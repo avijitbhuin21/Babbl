@@ -6,6 +6,8 @@ export { HistorySettings } from "./history/HistorySettings";
 export { AboutSettings } from "./about/AboutSettings";
 export { PostProcessingSettings } from "./post-processing/PostProcessingSettings";
 export { OnlineProviderSettings } from "./OnlineProviderSettings";
+export { ClipboardSettings } from "./clipboard/ClipboardSettings";
+export { ShareSettings } from "./share/ShareSettings";
 
 // Individual setting components
 export { MicrophoneSelector } from "./MicrophoneSelector";
