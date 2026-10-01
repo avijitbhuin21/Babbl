@@ -142,6 +142,54 @@ pub fn reconnect_all(inner: &Arc<Inner>) {
     for id in ids {
         connect_if_needed(inner, &id, true);
     }
+    dial_known_peers(inner);
+}
+
+/// Dials paired devices at the LAN addresses they last announced, for networks where discovery
+/// broadcasts never arrive (phone hotspots, routers that filter multicast).
+pub fn dial_known_peers(inner: &Arc<Inner>) {
+    if !inner.config().lan || inner.group_key().is_none() {
+        return;
+    }
+    let peers: Vec<(String, Vec<String>)> = inner
+        .store
+        .lock()
+        .unwrap()
+        .known_peers
+        .iter()
+        .filter(|p| !p.addrs.is_empty())
+        .map(|p| (p.device_id.clone(), p.addrs.clone()))
+        .collect();
+    for (device_id, addrs) in peers {
+        if inner.is_peer_connected(&device_id) {
+            continue;
+        }
+        let key = format!("known:{}", device_id);
+        if !inner.lan_connecting.lock().unwrap().insert(key.clone()) {
+            continue;
+        }
+        let task_inner = inner.clone();
+        let handle = tauri::async_runtime::spawn(async move {
+            let inner = task_inner;
+            for addr in addrs {
+                if inner.is_peer_connected(&device_id) {
+                    break;
+                }
+                let url = format!("ws://{}/sync", addr);
+                match net::connect(&url).await {
+                    Ok(ws) => {
+                        log::info!("[clipboard-sync] reached paired device directly at {}", addr);
+                        inner.lan_connecting.lock().unwrap().remove(&key);
+                        net::run_link(inner.clone(), ws, Via::Lan, url).await;
+                        return;
+                    }
+                    Err(e) => log::debug!("[clipboard-sync] direct dial {} failed: {}", url, e),
+                }
+            }
+            inner.lan_connecting.lock().unwrap().remove(&key);
+        });
+        inner.tasks.lock().unwrap().push(handle);
+    }
 }
 
 /// This machine's LAN addresses as "ip:port", most likely reachable first.

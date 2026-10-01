@@ -479,11 +479,16 @@ impl Inner {
     /// Encrypted Hello frame for this device, if it belongs to a group.
     pub fn hello_frame(&self, want_reply: bool) -> Option<Bytes> {
         let (device_id, name) = self.device();
+        let addrs = match *self.lan_port.lock().unwrap() {
+            Some(port) if self.config().lan => super::discovery::local_addresses(port),
+            _ => Vec::new(),
+        };
         let msg = Msg::Hello {
             device_id,
             name,
             version: PROTOCOL_VERSION,
             want_reply,
+            addrs,
         };
         self.seal(&msg)
     }
@@ -782,6 +787,7 @@ impl Inner {
                 name,
                 version,
                 want_reply,
+                addrs,
             } => {
                 if device_id == my_id {
                     return;
@@ -794,7 +800,7 @@ impl Inner {
                         PROTOCOL_VERSION
                     );
                 }
-                self.on_hello(link_id, &device_id, &name);
+                self.on_hello(link_id, &device_id, &name, addrs);
                 if want_reply {
                     if let Some(hello) = self.hello_frame(false) {
                         self.try_send(link_id, Out::Frame(hello));
@@ -851,7 +857,7 @@ impl Inner {
         }
     }
 
-    fn on_hello(&self, link_id: u64, device_id: &str, name: &str) {
+    fn on_hello(&self, link_id: u64, device_id: &str, name: &str, addrs: Vec<String>) {
         {
             let mut links = self.links.lock().unwrap();
             let Some(link) = links.get_mut(&link_id) else { return };
@@ -871,7 +877,14 @@ impl Inner {
         if let Some(p) = self.peers.lock().unwrap().get_mut(device_id) {
             p.name = name.to_string();
         }
-        self.update_store(|s| s.remember_peer(device_id, name, now_ms()));
+        self.update_store(|s| {
+            s.remember_peer(device_id, name, now_ms());
+            if !addrs.is_empty() {
+                if let Some(p) = s.known_peers.iter_mut().find(|p| p.device_id == device_id) {
+                    p.addrs = addrs;
+                }
+            }
+        });
         log::info!("[clipboard-sync] connected to {} on link {}", name, link_id);
         self.mark_dirty();
     }

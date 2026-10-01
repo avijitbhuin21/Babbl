@@ -183,7 +183,19 @@ function LocalTab({ status, run, update }: { status: SyncStatus; run: Run; updat
             </div>
           </>
         ) : (
-          <JoinForm method="url" placeholder="192.168.1.20:47821" />
+          <div className="space-y-1.5">
+            <JoinForm method="url" placeholder="192.168.1.20:47821" pinOptional />
+            <div className="flex items-center gap-1.5 text-xs text-text/50">
+              {t("sync.add.manualPin", "Already paired? Leave the PIN empty to just connect.")}
+              <InfoTip
+                position="bottom"
+                text={t(
+                  "sync.add.manualPinHint",
+                  "With a PIN this pairs a new machine. Without one, Babbl remembers the address and keeps connecting to it, which helps on networks where machines can't find each other automatically (e.g. phone hotspots).",
+                )}
+              />
+            </div>
+          </div>
         )}
       </Panel>
     </div>

@@ -92,7 +92,7 @@ export function JoinForm({
     try {
       if (method === "url" && pinOptional && !code.trim()) {
         const r = await commands.clipboardSyncAddUrl(tgt);
-        if (r.status === "ok") toast.success(t("sync.urlAdded", "Machine URL added"));
+        if (r.status === "ok") toast.success(t("sync.urlAdded", "Address saved, connecting…"));
         else toast.error(r.error);
       } else {
         const r = await commands.clipboardSyncJoin(method, tgt, code);

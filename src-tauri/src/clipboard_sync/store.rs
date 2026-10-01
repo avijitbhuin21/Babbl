@@ -15,6 +15,9 @@ pub struct KnownPeer {
     /// Whether files are shared with this device (sending and receiving).
     #[serde(default = "default_true")]
     pub files: bool,
+    /// LAN "ip:port" addresses the device last announced; dialled when discovery can't find it.
+    #[serde(default)]
+    pub addrs: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -148,6 +151,7 @@ impl SyncStore {
                 last_seen_ms: now_ms,
                 clipboard: true,
                 files: true,
+                addrs: Vec::new(),
             });
         }
     }

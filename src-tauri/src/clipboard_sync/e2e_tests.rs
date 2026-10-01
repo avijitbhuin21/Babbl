@@ -418,3 +418,54 @@ async fn share_throughput() {
     let _ = std::fs::remove_dir_all(alice_dir);
     let _ = std::fs::remove_dir_all(bob_dir);
 }
+
+/// Paired machines reconnect via remembered LAN addresses when discovery never sees them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn paired_peers_reconnect_by_remembered_address() {
+    let (alice, _arx, alice_dir) = device("Alice", None);
+    let (bob, _brx, bob_dir) = device("Bob", None);
+    let listener = net::bind(false).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let addr = format!("127.0.0.1:{}", port);
+    let server = tokio::spawn(net::run_server(alice.clone(), listener));
+    // Alice announces her LAN addresses in Hello (as with local network turned on). Give her a
+    // group first so start_pairing doesn't reconfigure and start real LAN services.
+    alice.set_group(Some(super::crypto::random_key()));
+    alice.update_store(|s| s.config.lan = true);
+    *alice.lan_port.lock().unwrap() = Some(port);
+
+    pairing::start_pairing(&alice).unwrap();
+    let pin = alice.status().pairing.unwrap().pin;
+    pairing::join(&bob, JoinTarget::Url(addr.clone()), &pin).await.unwrap();
+    let (alice_id, _) = alice.device();
+    wait_until("first link", Duration::from_secs(15), || bob.is_peer_connected(&alice_id)).await;
+
+    let announced = super::discovery::local_addresses(port);
+    wait_until("addresses remembered", Duration::from_secs(5), || {
+        bob.store.lock().unwrap().known_peers.iter().any(|p| p.device_id == alice_id && p.addrs == announced)
+    })
+    .await;
+
+    // Simulate a network where discovery is blocked and no URL is saved: drop everything.
+    for t in bob.tasks.lock().unwrap().drain(..) {
+        t.abort();
+    }
+    bob.update_store(|s| {
+        s.remote_urls.clear();
+        s.config.lan = true;
+        if let Some(p) = s.known_peers.iter_mut().find(|p| p.device_id == alice_id) {
+            p.addrs = vec![addr.clone()];
+        }
+    });
+    bob.drop_all_links();
+    alice.drop_all_links();
+    wait_until("disconnected", Duration::from_secs(10), || !bob.is_peer_connected(&alice_id)).await;
+
+    super::discovery::dial_known_peers(&bob);
+    wait_until("reconnected by address", Duration::from_secs(15), || bob.is_peer_connected(&alice_id)).await;
+    assert!(bob.status().peers.iter().any(|p| p.device_id == alice_id && p.connected));
+
+    server.abort();
+    let _ = std::fs::remove_dir_all(alice_dir);
+    let _ = std::fs::remove_dir_all(bob_dir);
+}

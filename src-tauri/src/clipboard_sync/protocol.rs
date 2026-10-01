@@ -81,6 +81,10 @@ pub enum Msg {
         name: String,
         version: u32,
         want_reply: bool,
+        /// The sender's LAN "ip:port" addresses, so peers can dial it directly next time
+        /// (discovery broadcasts are often blocked, e.g. on phone hotspots).
+        #[serde(default)]
+        addrs: Vec<String>,
     },
     Clip(ClipMsg),
     Chunk {
@@ -193,6 +197,7 @@ mod tests {
                 name: "Desk".into(),
                 version: PROTOCOL_VERSION,
                 want_reply: true,
+                addrs: vec!["192.168.1.5:47821".into()],
             },
             Msg::Clip(ClipMsg {
                 id: "1".into(),
