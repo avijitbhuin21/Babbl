@@ -5,6 +5,7 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     children: React.ReactNode;
+    wide?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -12,6 +13,7 @@ export const Modal: React.FC<ModalProps> = ({
     onClose,
     title,
     children,
+    wide = false,
 }) => {
     const handleKeyDown = useCallback(
         (event: KeyboardEvent) => {
@@ -44,7 +46,7 @@ export const Modal: React.FC<ModalProps> = ({
             />
 
             {/* Modal Container */}
-            <div className="relative z-10 w-full max-w-md mx-4 bg-background border border-mid-gray/40 rounded-xl shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-4 duration-300">
+            <div className={`relative z-10 w-full ${wide ? "max-w-2xl" : "max-w-md"} mx-4 max-h-[90vh] flex flex-col bg-background border border-mid-gray/40 rounded-xl shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-4 duration-300`}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-mid-gray/20">
                     <h2 className="text-lg font-semibold">{title}</h2>
@@ -70,7 +72,7 @@ export const Modal: React.FC<ModalProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="px-5 py-4">{children}</div>
+                <div className="px-5 py-4 overflow-y-auto">{children}</div>
             </div>
         </div>
     );

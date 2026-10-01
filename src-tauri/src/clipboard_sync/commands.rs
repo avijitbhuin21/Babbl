@@ -130,6 +130,15 @@ pub fn clipboard_sync_set_peer_clipboard(device_id: String, enabled: bool) -> Re
     Ok(inner.status())
 }
 
+/// Chooses whether files are shared with one paired device (both directions).
+#[tauri::command]
+#[specta::specta]
+pub fn clipboard_sync_set_peer_files(device_id: String, enabled: bool) -> Result<SyncStatus, String> {
+    let inner = engine()?;
+    inner.set_peer_files(&device_id, enabled);
+    Ok(inner.status())
+}
+
 /// Opens the native file picker; returns the chosen paths (empty when cancelled).
 #[tauri::command]
 #[specta::specta]
@@ -188,13 +197,68 @@ pub fn share_open_folder(app: tauri::AppHandle, which: String, device_id: Option
         .map_err(|e| format!("Failed to open folder: {}", e))
 }
 
-/// Clears the finished entries from the share history list.
+/// Clears finished entries from the share history (only those with `device_id` when given).
 #[tauri::command]
 #[specta::specta]
-pub fn share_clear_history() -> Result<SyncStatus, String> {
+pub fn share_clear_history(device_id: Option<String>) -> Result<SyncStatus, String> {
     let inner = engine()?;
-    inner.clear_share_history();
+    inner.clear_share_history(device_id.as_deref());
     Ok(inner.status())
+}
+
+fn shared_file(path: &str) -> Result<std::path::PathBuf, String> {
+    let inner = engine()?;
+    if !inner.is_shared_path(path) {
+        return Err("That file is not part of your shared files".to_string());
+    }
+    let p = std::path::PathBuf::from(path);
+    if !p.exists() {
+        return Err("The file was moved or deleted".to_string());
+    }
+    Ok(p)
+}
+
+/// Opens a shared or received file with its default app.
+#[tauri::command]
+#[specta::specta]
+pub fn share_open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = shared_file(&path)?;
+    app.opener()
+        .open_path(p.to_string_lossy().to_string(), None::<String>)
+        .map_err(|e| format!("Failed to open file: {}", e))
+}
+
+/// Shows a shared or received file selected in Explorer / Finder.
+#[tauri::command]
+#[specta::specta]
+pub fn share_reveal_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = shared_file(&path)?;
+    app.opener()
+        .reveal_item_in_dir(p)
+        .map_err(|e| format!("Failed to show file: {}", e))
+}
+
+/// Asks where to save a copy of a shared file; returns the new path, or None if cancelled.
+#[tauri::command]
+#[specta::specta]
+pub async fn share_save_as(app: tauri::AppHandle, path: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let src = shared_file(&path)?;
+    let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let picked = tokio::task::spawn_blocking(move || app.dialog().file().set_file_name(&name).blocking_save_file())
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(dest) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let (from, to) = (src.clone(), dest.clone());
+    tokio::task::spawn_blocking(move || std::fs::copy(from, to))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Could not save the file: {}", e))?;
+    Ok(Some(dest.to_string_lossy().to_string()))
 }
 
 /// Sends whatever is on the clipboard right now to all connected devices.

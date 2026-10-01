@@ -12,6 +12,9 @@ pub struct KnownPeer {
     /// Whether clipboards are exchanged with this device (both directions).
     #[serde(default = "default_true")]
     pub clipboard: bool,
+    /// Whether files are shared with this device (sending and receiving).
+    #[serde(default = "default_true")]
+    pub files: bool,
 }
 
 fn default_true() -> bool {
@@ -144,8 +147,17 @@ impl SyncStore {
                 name: name.to_string(),
                 last_seen_ms: now_ms,
                 clipboard: true,
+                files: true,
             });
         }
+    }
+
+    /// Whether files may be shared with `device_id` (unknown devices default to yes).
+    pub fn files_allowed(&self, device_id: &str) -> bool {
+        self.known_peers
+            .iter()
+            .find(|p| p.device_id == device_id)
+            .map_or(true, |p| p.files)
     }
 
     /// Whether clipboards should be exchanged with `device_id` (unknown devices default to yes).

@@ -60,7 +60,7 @@ pub const SHARE_RECEIVED_EVENT: &str = "share-received";
 pub const LINK_QUEUE: usize = 64;
 const SEEN_CAPACITY: usize = 50_000;
 const STALE_TRANSFER_MS: u64 = 5 * 60 * 1000;
-const SHARE_HISTORY: usize = 50;
+const SHARE_HISTORY: usize = 300;
 const PART_SUFFIX: &str = ".babblpart";
 
 pub enum Out {
@@ -193,13 +193,16 @@ pub struct TransferStatus {
     pub total: f64,
 }
 
-#[derive(Clone, Serialize, Type)]
+#[derive(Clone, Serialize, serde::Deserialize, Type)]
 pub struct ShareRecord {
     pub id: String,
     /// sent | received
     pub direction: String,
     pub summary: String,
     pub files: Vec<String>,
+    /// Full paths of the files on this machine (sources for sent, saved copies for received).
+    #[serde(default)]
+    pub paths: Vec<String>,
     /// Sender (received) or recipients (sent), as device names.
     pub peers: Vec<String>,
     pub peer_ids: Vec<String>,
@@ -237,6 +240,8 @@ pub struct PeerStatus {
     pub last_seen_ms: f64,
     /// Clipboards are exchanged with this device.
     pub clipboard: bool,
+    /// Files are shared with this device.
+    pub files: bool,
 }
 
 #[derive(Clone, Serialize, Type)]
@@ -273,6 +278,8 @@ pub struct SyncStatus {
     pub discovered: Vec<DiscoveredDevice>,
     pub lan: ServiceStatus,
     pub lan_port: Option<u16>,
+    /// This machine's addresses other LAN devices can pair with ("ip:port").
+    pub lan_addresses: Vec<String>,
     pub tunnel: ServiceStatus,
     pub tunnel_url: Option<String>,
     pub relay: ServiceStatus,
@@ -287,6 +294,7 @@ pub struct SyncStatus {
 pub struct Inner {
     pub host: Box<dyn Host>,
     pub store_path: PathBuf,
+    history_path: PathBuf,
     pub store: Mutex<SyncStore>,
     pub cipher: Mutex<Option<FrameCipher>>,
     pub links: Mutex<HashMap<u64, Link>>,
@@ -319,9 +327,12 @@ impl Inner {
         let store_path = super::store::store_path(&host.data_dir());
         let store = SyncStore::load(&store_path);
         let cipher = store.group_key_bytes().map(|k| FrameCipher::for_group(&k));
+        let history_path = host.data_dir().join("share_history.json");
+        let history = load_share_history(&history_path);
         Arc::new(Self {
             host,
             store_path,
+            history_path,
             store: Mutex::new(store),
             cipher: Mutex::new(cipher),
             links: Mutex::new(HashMap::new()),
@@ -330,7 +341,7 @@ impl Inner {
             seen: Mutex::new(Seen::default()),
             incoming: Mutex::new(HashMap::new()),
             outgoing: Mutex::new(HashMap::new()),
-            shares: Mutex::new(VecDeque::new()),
+            shares: Mutex::new(history),
             outbox: Mutex::new(Default::default()),
             io_tx: Mutex::new(None),
             pairing: Mutex::new(None),
@@ -572,6 +583,7 @@ impl Inner {
         shares.push_front(record);
         shares.truncate(SHARE_HISTORY);
         drop(shares);
+        self.save_share_history();
         self.mark_dirty();
     }
 
@@ -579,7 +591,32 @@ impl Inner {
         if let Some(r) = self.shares.lock().unwrap().iter_mut().find(|r| r.id == id) {
             f(r);
         }
+        self.save_share_history();
         self.mark_dirty();
+    }
+
+    /// Writes the share history atomically so the per-machine file list survives restarts.
+    fn save_share_history(&self) {
+        let records: Vec<ShareRecord> = self.shares.lock().unwrap().iter().cloned().collect();
+        let Ok(json) = serde_json::to_vec(&records) else { return };
+        if let Some(dir) = self.history_path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let tmp = self.history_path.with_extension("json.tmp");
+        if std::fs::write(&tmp, json).is_ok() && std::fs::rename(&tmp, &self.history_path).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+
+    /// True if `path` is one of the files in the share history (the only paths the UI may open).
+    pub fn is_shared_path(&self, path: &str) -> bool {
+        let wanted = std::path::Path::new(path);
+        self.shares
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|r| r.paths.iter())
+            .any(|p| paths_equal(std::path::Path::new(p), wanted))
     }
 
     /// Full status snapshot for the UI.
@@ -623,6 +660,7 @@ impl Inner {
                     via: l.map(|l| l.1.clone()).unwrap_or_default(),
                     last_seen_ms: k.last_seen_ms as f64,
                     clipboard: k.clipboard,
+                    files: k.files,
                 }
             })
             .collect();
@@ -695,6 +733,11 @@ impl Inner {
         }));
         let shares = self.shares.lock().unwrap().iter().cloned().collect();
 
+        let lan_addresses = match *self.lan_port.lock().unwrap() {
+            Some(port) if config.lan => super::discovery::local_addresses(port),
+            _ => Vec::new(),
+        };
+
         SyncStatus {
             config,
             device_id,
@@ -705,6 +748,7 @@ impl Inner {
             discovered,
             lan: self.lan.lock().unwrap().clone(),
             lan_port: *self.lan_port.lock().unwrap(),
+            lan_addresses,
             tunnel: self.tunnel.lock().unwrap().clone(),
             tunnel_url: self.tunnel_url.lock().unwrap().clone(),
             relay: self.relay.lock().unwrap().clone(),
@@ -1013,6 +1057,7 @@ impl Inner {
                         .iter()
                         .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
                         .collect(),
+                    paths: paths.iter().map(|p| p.to_string_lossy().to_string()).collect(),
                     peers: vec![origin_name],
                     peer_ids: vec![origin_id],
                     delivered_to: Vec::new(),
@@ -1078,6 +1123,10 @@ impl Inner {
     fn on_share(&self, share: ShareMsg) {
         let (my_id, _) = self.device();
         if !share.to.contains(&my_id) {
+            return;
+        }
+        if !self.store.lock().unwrap().files_allowed(&share.origin) {
+            log::info!("[clipboard-sync] ignoring files from {} (file sharing off)", share.origin_name);
             return;
         }
         let summary = ClipContent::Files {
@@ -1268,13 +1317,22 @@ impl Inner {
             }
         }
         let mut to: Vec<String> = Vec::new();
+        let mut blocked = false;
         for id in recipients {
+            if !self.store.lock().unwrap().files_allowed(&id) {
+                blocked = true;
+                continue;
+            }
             if !to.contains(&id) && self.is_peer_connected(&id) {
                 to.push(id);
             }
         }
         if to.is_empty() {
-            return Err("None of the selected devices is online".to_string());
+            return Err(if blocked {
+                "File sharing is turned off for the selected device".to_string()
+            } else {
+                "None of the selected devices is online".to_string()
+            });
         }
         let files: Vec<FileMeta> = paths.iter().map(|p| file_meta(p)).collect();
         let total: u64 = files.iter().map(|f| f.size).sum();
@@ -1288,6 +1346,7 @@ impl Inner {
             direction: "sent".to_string(),
             summary: summary.clone(),
             files: files.iter().map(|f| f.name.clone()).collect(),
+            paths: paths.iter().map(|p| p.to_string_lossy().to_string()).collect(),
             peers: names.clone(),
             peer_ids: to.clone(),
             delivered_to: Vec::new(),
@@ -1478,8 +1537,12 @@ impl Inner {
     }
 
     /// Updates whether clipboards are exchanged with a paired device.
-    pub fn clear_share_history(&self) {
-        self.shares.lock().unwrap().retain(|r| r.state == "sending");
+    /// Clears finished entries from the share history, optionally only those with one machine.
+    pub fn clear_share_history(&self, device_id: Option<&str>) {
+        self.shares.lock().unwrap().retain(|r| {
+            r.state == "sending" || device_id.is_some_and(|d| !r.peer_ids.iter().any(|p| p == d))
+        });
+        self.save_share_history();
         self.mark_dirty();
     }
 
@@ -1488,6 +1551,16 @@ impl Inner {
         self.update_store(|s| {
             if let Some(p) = s.known_peers.iter_mut().find(|p| p.device_id == device_id) {
                 p.clipboard = enabled;
+            }
+        });
+        self.mark_dirty();
+    }
+
+    /// Updates whether files are shared with a paired device (both directions).
+    pub fn set_peer_files(&self, device_id: &str, enabled: bool) {
+        self.update_store(|s| {
+            if let Some(p) = s.known_peers.iter_mut().find(|p| p.device_id == device_id) {
+                p.files = enabled;
             }
         });
         self.mark_dirty();
@@ -1574,6 +1647,29 @@ impl CompressProbe {
             }
             _ => (false, raw),
         }
+    }
+}
+
+/// Loads saved share history; transfers that were mid-flight when Babbl quit become "failed".
+fn load_share_history(path: &std::path::Path) -> VecDeque<ShareRecord> {
+    let mut records: Vec<ShareRecord> = std::fs::read(path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    for r in records.iter_mut().filter(|r| r.state == "sending") {
+        r.state = "failed".to_string();
+        r.error = Some("Babbl was closed during the transfer".to_string());
+    }
+    records.truncate(SHARE_HISTORY);
+    records.into()
+}
+
+/// Compares paths the way the OS does (case-insensitive on Windows).
+fn paths_equal(a: &std::path::Path, b: &std::path::Path) -> bool {
+    if cfg!(windows) {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    } else {
+        a == b
     }
 }
 

@@ -307,6 +307,22 @@ async fn targeted_clipboard_and_shares() {
     })
     .await;
 
+    // History (with file paths) survives a restart, so the machine page still lists the files.
+    let reloaded = Inner::new(Box::new(TestHost { dir: alice_dir.clone() }));
+    let rec = reloaded
+        .status()
+        .shares
+        .into_iter()
+        .find(|r| r.id == share_id)
+        .expect("share history persisted");
+    assert_eq!(rec.peer_ids, vec![carol_id.clone()]);
+    assert!(rec.paths[0].ends_with("report.bin"));
+    assert!(reloaded.is_shared_path(&rec.paths[0]));
+    assert!(!reloaded.is_shared_path(&alice_dir.join("data").join("clipboard_sync.json").to_string_lossy()));
+    let carol_rec = carol.status().shares.into_iter().find(|r| r.id == share_id).expect("received record");
+    assert_eq!(carol_rec.direction, "received");
+    assert!(carol.is_shared_path(&carol_file.to_string_lossy()));
+
     // Same name again must not overwrite the first file.
     let again = alice.prepare_share(vec![src.join("report.bin")], vec![carol_id.clone()]).unwrap();
     alice.run_share(again).await.unwrap();
@@ -316,6 +332,16 @@ async fn targeted_clipboard_and_shares() {
     // Folders are rejected, offline-only recipients are rejected.
     assert!(alice.prepare_share(vec![src.clone()], vec![carol_id.clone()]).is_err());
     assert!(alice.prepare_share(vec![src.join("report.bin")], vec!["offline-id".into()]).is_err());
+
+    // Turning file sharing off for a device blocks sending to it; turning it back on restores it.
+    alice.set_peer_files(&carol_id, false);
+    assert!(!alice.status().peers.iter().find(|p| p.device_id == carol_id).unwrap().files);
+    let err = alice
+        .prepare_share(vec![src.join("report.bin")], vec![carol_id.clone()])
+        .err()
+        .expect("files off must block the share");
+    assert!(err.contains("turned off"), "unexpected error: {}", err);
+    alice.set_peer_files(&carol_id, true);
 
     // Watched folder: a file dropped into "Send to Bob" is sent to Bob and moved to Sent.
     super::outbox::ensure_layout(&alice);

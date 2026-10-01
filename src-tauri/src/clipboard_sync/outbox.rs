@@ -103,9 +103,18 @@ pub fn scan(inner: &Arc<Inner>) {
                 }
             }
             let recipients = match &target {
-                Some(id) if inner.is_peer_connected(id) => vec![id.clone()],
+                Some(id) if inner.is_peer_connected(id) && inner.store.lock().unwrap().files_allowed(id) => {
+                    vec![id.clone()]
+                }
                 Some(_) => continue,
-                None => inner.connected_peer_ids(),
+                None => {
+                    let store = inner.store.lock().unwrap();
+                    inner
+                        .connected_peer_ids()
+                        .into_iter()
+                        .filter(|id| store.files_allowed(id))
+                        .collect()
+                }
             };
             if recipients.is_empty() {
                 continue;

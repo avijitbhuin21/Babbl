@@ -89,15 +89,17 @@ fn on_resolved(inner: &Arc<Inner>, info: &ServiceInfo) {
         },
     );
     inner.mark_dirty();
-    connect_if_needed(inner, &id);
+    connect_if_needed(inner, &id, false);
 }
 
-/// Dials a discovered same-group device (only the lower id dials, so each pair gets one link).
-pub fn connect_if_needed(inner: &Arc<Inner>, device_id: &str) {
+/// Dials a discovered same-group device. Normally only the lower id dials so each pair gets one
+/// link; with `either_side` the higher id dials too, because discovery can be one-way (a firewall
+/// or router that drops multicast towards one machine) and then the lower id never sees us.
+pub fn connect_if_needed(inner: &Arc<Inner>, device_id: &str, either_side: bool) {
     let (my_id, _) = inner.device();
     let Some(key) = inner.group_key() else { return };
     let fingerprint = crypto::group_fingerprint(&key);
-    if my_id.as_str() >= device_id || inner.is_peer_connected(device_id) {
+    if (!either_side && my_id.as_str() >= device_id) || inner.is_peer_connected(device_id) {
         return;
     }
     let url = {
@@ -133,10 +135,41 @@ pub fn connect_if_needed(inner: &Arc<Inner>, device_id: &str) {
     inner.tasks.lock().unwrap().push(handle);
 }
 
-/// Retries links to every discovered same-group device (called periodically).
+/// Retries links to every discovered same-group device (called periodically). By now the
+/// lower id had its chance, so either side may dial.
 pub fn reconnect_all(inner: &Arc<Inner>) {
     let ids: Vec<String> = inner.discovered.lock().unwrap().keys().cloned().collect();
     for id in ids {
-        connect_if_needed(inner, &id);
+        connect_if_needed(inner, &id, true);
     }
+}
+
+/// This machine's LAN addresses as "ip:port", most likely reachable first.
+pub fn local_addresses(port: u16) -> Vec<String> {
+    let mut ips: Vec<std::net::Ipv4Addr> = Vec::new();
+    // The interface used for the default route is the one other machines can almost always reach.
+    if let Ok(sock) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if sock.connect("8.8.8.8:80").is_ok() {
+            if let Ok(std::net::SocketAddr::V4(a)) = sock.local_addr() {
+                if !a.ip().is_unspecified() {
+                    ips.push(*a.ip());
+                }
+            }
+        }
+    }
+    const VIRTUAL: [&str; 7] = ["vethernet", "virtualbox", "vmware", "wsl", "hyper-v", "docker", "loopback"];
+    if let Ok(ifaces) = if_addrs::get_if_addrs() {
+        for iface in ifaces {
+            let name = iface.name.to_lowercase();
+            if VIRTUAL.iter().any(|v| name.contains(v)) {
+                continue;
+            }
+            if let IpAddr::V4(v4) = iface.ip() {
+                if v4.is_private() && !ips.contains(&v4) {
+                    ips.push(v4);
+                }
+            }
+        }
+    }
+    ips.into_iter().map(|ip| format!("{}:{}", ip, port)).collect()
 }

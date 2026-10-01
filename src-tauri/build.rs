@@ -11,14 +11,30 @@ fn main() {
 /// Adds the Vulkan SDK's import-library folder to the link path on Windows.
 /// transcribe-cpp-sys asks for `vulkan-1.lib` but only passes its absolute path as a raw
 /// link arg, which does not reach this crate's binaries, so link.exe cannot find it.
+/// Falls back to the default install folder because terminals opened before the SDK was
+/// installed don't have VULKAN_SDK set.
 fn emit_vulkan_search_path() {
     println!("cargo:rerun-if-env-changed=VULKAN_SDK");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    let Ok(sdk) = std::env::var("VULKAN_SDK") else { return };
-    let lib = std::path::Path::new(&sdk).join("Lib");
-    if lib.join("vulkan-1.lib").exists() {
+    let from_env = std::env::var("VULKAN_SDK")
+        .ok()
+        .map(|sdk| std::path::Path::new(&sdk).join("Lib"));
+    let from_default = || {
+        let mut versions: Vec<std::path::PathBuf> = std::fs::read_dir("C:\\VulkanSDK")
+            .ok()?
+            .flatten()
+            .map(|e| e.path().join("Lib"))
+            .filter(|lib| lib.join("vulkan-1.lib").exists())
+            .collect();
+        versions.sort();
+        versions.pop()
+    };
+    let lib = from_env
+        .filter(|lib| lib.join("vulkan-1.lib").exists())
+        .or_else(from_default);
+    if let Some(lib) = lib {
         println!("cargo:rustc-link-search=native={}", lib.display());
     }
 }
