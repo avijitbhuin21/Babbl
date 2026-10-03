@@ -1,10 +1,36 @@
 import React from "react";
-import { Gauge, History, Keyboard, Languages, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Boxes,
+  Cloud,
+  Cpu,
+  Gauge,
+  History,
+  Keyboard,
+  Languages,
+  MonitorSmartphone,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import { Container } from "../components/Container";
 import { Reveal } from "../components/Reveal";
 import { FEATURES } from "../lib/site";
 
-const ICONS = { Gauge, History, Keyboard, Languages, ShieldCheck, Sparkles };
+const ICONS = {
+  Boxes,
+  Cloud,
+  Cpu,
+  Gauge,
+  History,
+  Keyboard,
+  Languages,
+  MonitorSmartphone,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+};
 
 export const Features: React.FC = () => (
   <section id="features" className="border-t border-border/40 py-20 md:py-28">
@@ -21,7 +47,7 @@ export const Features: React.FC = () => (
           const Icon = ICONS[feature.icon as keyof typeof ICONS];
 
           return (
-            <Reveal key={feature.title} delay={i * 60}>
+            <Reveal key={feature.title} delay={(i % 3) * 60}>
               <div className="h-full bg-background p-7 transition-colors duration-200 hover:bg-surface/40">
                 {Icon && <Icon size={18} className="text-accent" />}
                 <h3 className="mt-5 text-[15px] font-medium tracking-tight">{feature.title}</h3>

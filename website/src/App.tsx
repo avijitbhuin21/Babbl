@@ -6,6 +6,8 @@ import Home from "./pages/Home";
 import Docs from "./pages/Docs";
 import DownloadPage from "./pages/Download";
 import Changelog from "./pages/Changelog";
+import Credits from "./pages/Credits";
+import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -34,6 +36,8 @@ const App: React.FC = () => (
         <Route path="/docs" element={<Docs />} />
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/changelog" element={<Changelog />} />
+        <Route path="/credits" element={<Credits />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<NotFound />} />

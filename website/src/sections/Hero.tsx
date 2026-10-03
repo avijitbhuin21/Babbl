@@ -24,9 +24,10 @@ export const Hero: React.FC = () => (
         </h1>
 
         <p className="mt-6 max-w-[54ch] text-[16px] leading-relaxed text-text/55 md:text-[17px]">
-          Babbl is a local-first dictation app for your desktop. Hold a shortcut, say what you
-          mean, and the text appears wherever your cursor is, with no account, no upload and no
-          waiting.
+          Babbl is a local-first dictation app for your desktop. Hold a shortcut and say what you
+          mean. The words appear live as you speak and land wherever your cursor is. You can
+          also refine selected text by voice and share your clipboard between your computers.
+          No account and no upload.
         </p>
 
         <div className="mt-9 flex flex-wrap items-center gap-3">

@@ -3,7 +3,7 @@ import { Container } from "../components/Container";
 import { PageHeader } from "../components/PageHeader";
 import { Prose } from "../components/Prose";
 import { Reveal } from "../components/Reveal";
-import { GITHUB_URL } from "../lib/site";
+import { CONTACT_EMAIL, GITHUB_URL } from "../lib/site";
 
 const Privacy: React.FC = () => (
   <>
@@ -38,6 +38,12 @@ const Privacy: React.FC = () => (
               own API key. In that case your transcript is sent to that provider under their terms,
               not ours.
             </li>
+            <li>
+              Clipboard sync and file sharing, only between machines you pair yourself. This data
+              is encrypted end to end before it leaves your device. When a direct connection isn't
+              possible it goes through our relay, which only forwards encrypted bytes and can't
+              read them.
+            </li>
           </ul>
 
           <h2>Third parties</h2>
@@ -48,7 +54,8 @@ const Privacy: React.FC = () => (
 
           <h2>Contact</h2>
           <p>
-            Questions or concerns can be raised as an issue on{" "}
+            Questions or concerns can be sent to{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or raised as an issue on{" "}
             <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer">
               GitHub
             </a>

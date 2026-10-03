@@ -10,7 +10,10 @@ const sections = [
   { id: "first-run", label: "First run" },
   { id: "shortcut", label: "Shortcut" },
   { id: "models", label: "Models" },
+  { id: "live-text", label: "Live text" },
   { id: "post-processing", label: "Post-processing" },
+  { id: "refine", label: "Refine" },
+  { id: "sync", label: "Sync" },
   { id: "history", label: "History" },
   { id: "troubleshooting", label: "Troubleshooting" },
 ];
@@ -81,35 +84,92 @@ const Docs: React.FC = () => (
 
           <h2 id="models">Models</h2>
           <p>
-            Models live on disk and load on demand. If you set an unload timeout, Babbl frees the
-            memory after a period of inactivity and reloads on the next dictation. You can also
-            point Babbl at a hosted provider under <code>Cloud models</code> if you prefer speed
-            over locality. That is off by default.
+            All local models run on Babbl's built-in GGUF engine. The catalogue includes Whisper,
+            Parakeet, Moonshine, Qwen3-ASR, Canary, Voxtral, Granite Speech, SenseVoice and more.
+            Each model card shows its size, languages, and whether it supports live text or
+            translation.
+          </p>
+          <p>
+            Models are stored on disk and load when needed. If you set an unload timeout, Babbl
+            frees the memory after a period of inactivity and reloads the model next time you
+            dictate.
+          </p>
+
+          <h3>GPU acceleration</h3>
+          <p>
+            Under <code>Advanced</code>, <em>GPU acceleration</em> runs models on your graphics card,
+            through Vulkan on Windows and Linux or Metal on macOS. If no compatible GPU is found,
+            Babbl uses the CPU instead.
+          </p>
+
+          <h3>Cloud models</h3>
+          <p>
+            If you'd rather have speed than keep everything local, turn on <code>Cloud models</code>{" "}
+            to transcribe with a hosted provider using your own API key. This is off by default.
           </p>
 
           <h3>Languages</h3>
           <p>
-            Pick a language explicitly or leave it on auto-detect. <em>Translate to English</em>{" "}
-            transcribes any supported language directly into English.
+            Pick a language explicitly or leave it on auto-detect. On models that support it,{" "}
+            <em>Translate to English</em> transcribes any supported language directly into English.
+          </p>
+
+          <h2 id="live-text">Live text</h2>
+          <p>
+            Models marked <em>Live</em> can stream. Turn on <em>Live text while speaking</em> and
+            the overlay shows your words as you talk. When you stop, the final transcript is
+            pasted.
           </p>
 
           <h2 id="post-processing">Post-processing</h2>
           <p>
             Enable post-processing to pass the raw transcript through a language model before it is
-            pasted. Typical uses are punctuation repair, removing filler words, or enforcing a
-            tone. Prompts are editable, and you can bring your own provider and API key.
+            pasted. Typical uses are fixing punctuation, removing filler words or setting a tone.
+            You can edit the prompts and bring your own provider and API key. On Apple silicon
+            Macs running macOS 26 or later, Apple Intelligence runs it fully on-device.
           </p>
 
           <h3>Custom words</h3>
           <p>
             Add names, product terms or jargon under <code>Advanced → Custom words</code>. Babbl
-            corrects close matches in the transcript so recurring vocabulary stops being a problem.
+            corrects close matches in the transcript, so words you use often come out right.
+          </p>
+
+          <h2 id="refine">Refine</h2>
+          <p>
+            Select text in any app, hold the refine shortcut and say what you want changed, for
+            example "shorten this" or "make it more formal". Babbl rewrites the selection with the
+            model you choose under <code>Cloud models → Refine</code> and pastes it back in place.
+            The refine shortcut can be the same key as dictation or a separate one.
+          </p>
+
+          <h2 id="sync">Sync</h2>
+          <p>
+            The <code>Sync</code> section connects your computers. Give each one a name, then add a
+            machine with a short PIN. On the same network it is found automatically; across the
+            internet the connection goes through a relay. Once paired:
+          </p>
+          <ul>
+            <li>
+              <strong>Clipboard</strong>: copied text and images appear on your other machines. You
+              can turn this off for each device.
+            </li>
+            <li>
+              <strong>Files</strong>: open a machine and drop files onto it. There is no size
+              limit. Received files go into Babbl's storage folder, and each machine shows a list
+              of everything sent and received.
+            </li>
+          </ul>
+          <p>
+            Everything is encrypted end to end with XChaCha20-Poly1305, using a key agreed during
+            PIN pairing. The relay only ever sees encrypted data.
           </p>
 
           <h2 id="history">History</h2>
           <p>
-            Every transcription is saved locally with its audio, subject to the retention window
-            you set. Nothing is synced. Clearing history deletes both the text and the recordings.
+            Every transcription is saved locally with its audio, for as long as you choose to keep
+            it. Transcription history is never synced. Clearing history deletes both the text and
+            the recordings.
           </p>
 
           <h2 id="troubleshooting">Troubleshooting</h2>
@@ -123,7 +183,13 @@ const Docs: React.FC = () => (
               <code>General</code> and confirm the level meter moves while you speak.
             </li>
             <li>
-              <strong>Slow transcription</strong>: try a smaller model, or enable a cloud provider.
+              <strong>Slow transcription</strong>: turn on GPU acceleration, try a smaller model or
+              use a cloud provider.
+            </li>
+            <li>
+              <strong>Machines don't see each other</strong>: some networks block local discovery,
+              such as Windows "Public" networks or phone hotspots. Pair using the IP address and
+              port shown in the Add machine dialog, or use the Internet tab.
             </li>
           </ul>
           <p>

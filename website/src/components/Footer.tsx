@@ -19,6 +19,8 @@ const columns: {
     title: "Resources",
     links: [
       { label: "Docs", to: "/docs" },
+      { label: "Credits", to: "/credits" },
+      { label: "Contact", to: "/contact" },
       { label: "GitHub", href: GITHUB_URL, external: true },
       { label: "Releases", href: RELEASES_URL, external: true },
     ],
@@ -82,7 +84,13 @@ export const Footer: React.FC = () => (
 
     <Container className="flex flex-col gap-2 border-t border-border/30 py-6 text-xs text-text/35 sm:flex-row sm:items-center sm:justify-between">
       <span>© {new Date().getFullYear()} Babbl. Open source under MIT.</span>
-      <span>Built with Rust and Tauri.</span>
+      <span>
+        Built with Rust and Tauri, based on{" "}
+        <Link to="/credits" className="underline-offset-2 hover:text-text/60 hover:underline">
+          Handy
+        </Link>
+        .
+      </span>
     </Container>
   </footer>
 );

@@ -189,7 +189,9 @@
       },
       "liveTranscription": {
         "label": "Live text while speaking",
-        "description": "With a Live model, show the words in the overlay as you speak. The final text is pasted when you stop."
+        "description": "With a Live model, show the words in the overlay as you speak. The final text is pasted when you stop.",
+        "descriptionUnsupported": "{{model}} can't stream. Pick a model marked Live to see text while you speak.",
+        "descriptionCloud": "Live text isn't available with cloud models. Switch to a local model marked Live to use it."
       },
       "useGpu": {
         "label": "GPU acceleration",

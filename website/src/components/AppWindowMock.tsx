@@ -16,7 +16,7 @@ export const AppWindowMock: React.FC = () => (
       <div className="border-r border-border/40 bg-background/40 p-3">
         <img src="/babbl-wordmark.png" alt="" className="mb-5 w-[72px] opacity-80" />
         <div className="space-y-1">
-          {["General", "Advanced", "History", "About"].map((item, i) => (
+          {["General", "Advanced", "History", "Sync", "About"].map((item, i) => (
             <div
               key={item}
               className={`rounded-md px-2.5 py-1.5 text-xs ${
@@ -50,7 +50,7 @@ export const AppWindowMock: React.FC = () => (
         <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3.5 py-3">
           <div>
             <p className="text-xs font-medium">Model</p>
-            <p className="text-[11px] text-text/35">whisper-large-v3-turbo</p>
+            <p className="text-[11px] text-text/35">parakeet-unified-en · Live</p>
           </div>
           <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] text-accent">
             Ready
