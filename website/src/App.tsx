@@ -11,9 +11,20 @@ import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+import seo from "../seo-routes.json";
 
 const ScrollManager: React.FC = () => {
   const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    const route = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+    const meta = (seo.routes as Record<string, { title: string; description: string }>)[route];
+    if (meta) {
+      document.title = meta.title;
+      document.querySelector('meta[name="description"]')?.setAttribute("content", meta.description);
+      document.querySelector('link[rel="canonical"]')?.setAttribute("href", `${seo.siteUrl}${route}`);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (hash) {

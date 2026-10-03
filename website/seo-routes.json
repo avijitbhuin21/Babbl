@@ -1,0 +1,45 @@
+{
+  "siteUrl": "https://babbl.avijitbhuin.com",
+  "routes": {
+    "/": {
+      "title": "Babbl: Private voice-to-text dictation for Windows, macOS and Linux",
+      "description": "Babbl is a free, open-source dictation app that runs on your own machine. Hold a shortcut, speak, and your words appear in any app, with live text, voice refine and clipboard sync.",
+      "priority": "1.0"
+    },
+    "/download": {
+      "title": "Download Babbl for Windows, macOS and Linux",
+      "description": "Download Babbl, the free local-first dictation app. Installers for Windows 10/11, macOS (Apple silicon) and Linux (AppImage, .deb, .rpm).",
+      "priority": "0.9"
+    },
+    "/docs": {
+      "title": "Babbl Docs: Getting started with local dictation",
+      "description": "Install Babbl, pick a speech model, set your shortcut, and learn about live text, refine, post-processing, clipboard sync and troubleshooting.",
+      "priority": "0.8"
+    },
+    "/changelog": {
+      "title": "Babbl Changelog: What's new",
+      "description": "Release notes for every version of Babbl, the open-source local dictation app.",
+      "priority": "0.6"
+    },
+    "/credits": {
+      "title": "Credits: Babbl is built on Handy",
+      "description": "Babbl is a fork of Handy, the open-source speech-to-text app by CJ Pais. See what Babbl builds on and the open-source projects behind it.",
+      "priority": "0.4"
+    },
+    "/contact": {
+      "title": "Contact Babbl",
+      "description": "Get in touch about Babbl by email, or report bugs and request features on GitHub.",
+      "priority": "0.4"
+    },
+    "/privacy": {
+      "title": "Babbl Privacy Policy",
+      "description": "Babbl runs on your computer and collects nothing: no accounts, no analytics, no telemetry.",
+      "priority": "0.3"
+    },
+    "/terms": {
+      "title": "Babbl Terms of Use",
+      "description": "Terms of use for Babbl, the free and open-source dictation app.",
+      "priority": "0.3"
+    }
+  }
+}
