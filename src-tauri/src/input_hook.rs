@@ -186,6 +186,10 @@ impl InputHookManager {
                         Some(event)
                     }
                 };
+                // The event tap runs off the main thread; macOS 26 aborts if rdev queries the
+                // keyboard layout (TSM/TIS) here, so have rdev hop to the main queue for it.
+                #[cfg(target_os = "macos")]
+                rdev::set_is_main_thread(false);
                 rdev::grab(callback).map_err(|e| format!("{:?}", e))
             };
 
