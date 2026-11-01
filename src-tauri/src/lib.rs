@@ -119,8 +119,7 @@ fn show_main_window(app: &AppHandle) {
 
 fn initialize_core_logic(app_handle: &AppHandle) {
     // Initialize the input state (Enigo singleton for keyboard/mouse simulation)
-    let enigo_state = input::EnigoState::new().expect("Failed to initialize input state (Enigo)");
-    app_handle.manage(enigo_state);
+    app_handle.manage(input::EnigoState::new());
 
     // Initialize the managers
     transcribe_cpp::init_logging();

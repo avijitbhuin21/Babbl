@@ -4,22 +4,47 @@ use tauri::{AppHandle, Manager};
 
 /// Wrapper for Enigo to store in Tauri's managed state.
 /// Enigo is wrapped in a Mutex since it requires mutable access.
-pub struct EnigoState(pub Mutex<Enigo>);
+/// It starts empty when input simulation isn't permitted yet (e.g. macOS Accessibility was revoked
+/// by an update) and is created on first use, so the app can still launch and ask for permission.
+pub struct EnigoState(Mutex<Option<Enigo>>);
 
 impl EnigoState {
-    pub fn new() -> Result<Self, String> {
-        let enigo = Enigo::new(&Settings::default())
-            .map_err(|e| format!("Failed to initialize Enigo: {}", e))?;
-        Ok(Self(Mutex::new(enigo)))
+    pub fn new() -> Self {
+        let enigo = match create_enigo() {
+            Ok(enigo) => Some(enigo),
+            Err(e) => {
+                log::warn!("Input simulation unavailable at startup, will retry on use: {}", e);
+                None
+            }
+        };
+        Self(Mutex::new(enigo))
     }
+
+    /// Runs `f` with the Enigo instance, creating it first if startup initialization failed.
+    pub fn with<R>(&self, f: impl FnOnce(&mut Enigo) -> Result<R, String>) -> Result<R, String> {
+        let mut guard = self
+            .0
+            .lock()
+            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        if guard.is_none() {
+            *guard = Some(create_enigo()?);
+        }
+        f(guard.as_mut().expect("Enigo initialized above"))
+    }
+}
+
+/// Creates a new Enigo instance, failing when input simulation isn't permitted.
+fn create_enigo() -> Result<Enigo, String> {
+    Enigo::new(&Settings::default()).map_err(|e| format!("Failed to initialize Enigo: {}", e))
 }
 
 /// Get the current mouse cursor position using the managed Enigo instance.
 /// Returns None if the state is not available or if getting the location fails.
 pub fn get_cursor_position(app_handle: &AppHandle) -> Option<(i32, i32)> {
     let enigo_state = app_handle.try_state::<EnigoState>()?;
-    let enigo = enigo_state.0.lock().ok()?;
-    enigo.location().ok()
+    enigo_state
+        .with(|enigo| enigo.location().map_err(|e| e.to_string()))
+        .ok()
 }
 
 /// Sends a Ctrl+V or Cmd+V paste command using platform-specific virtual key codes.

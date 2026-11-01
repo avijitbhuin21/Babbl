@@ -149,11 +149,7 @@ pub fn capture_selected_text(app_handle: &AppHandle) -> Result<Option<String>, S
         let enigo_state = app_handle
             .try_state::<EnigoState>()
             .ok_or("Enigo state not initialized")?;
-        let mut enigo = enigo_state
-            .0
-            .lock()
-            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
-        input::send_copy_ctrl_c(&mut enigo)?;
+        enigo_state.with(|enigo| input::send_copy_ctrl_c(enigo))?;
     }
 
     std::thread::sleep(std::time::Duration::from_millis(120));
@@ -216,11 +212,7 @@ pub fn paste_over_selection(expected: &str, text: String, app_handle: &AppHandle
         let enigo_state = app_handle
             .try_state::<EnigoState>()
             .ok_or("Enigo state not initialized")?;
-        let mut enigo = enigo_state
-            .0
-            .lock()
-            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
-        input::send_shift_left(&mut enigo, count)?;
+        enigo_state.with(|enigo| input::send_shift_left(enigo, count))?;
     }
     std::thread::sleep(std::time::Duration::from_millis(60));
 
@@ -235,11 +227,7 @@ pub fn paste_over_selection(expected: &str, text: String, app_handle: &AppHandle
         let enigo_state = app_handle
             .try_state::<EnigoState>()
             .ok_or("Enigo state not initialized")?;
-        let mut enigo = enigo_state
-            .0
-            .lock()
-            .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
-        input::send_right(&mut enigo)?;
+        enigo_state.with(|enigo| input::send_right(enigo))?;
     }
     std::thread::sleep(std::time::Duration::from_millis(40));
     paste(text, app_handle.clone())?;
@@ -263,21 +251,20 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     let enigo_state = app_handle
         .try_state::<EnigoState>()
         .ok_or("Enigo state not initialized")?;
-    let mut enigo = enigo_state
-        .0
-        .lock()
-        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
 
     // Perform the paste operation
-    match paste_method {
-        PasteMethod::None => {
-            info!("PasteMethod::None selected - skipping paste action");
+    enigo_state.with(|enigo| {
+        match paste_method {
+            PasteMethod::None => {
+                info!("PasteMethod::None selected - skipping paste action");
+            }
+            PasteMethod::Direct => input::paste_text_direct(enigo, &text)?,
+            PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+                paste_via_clipboard(enigo, &text, &app_handle, &paste_method)?
+            }
         }
-        PasteMethod::Direct => input::paste_text_direct(&mut enigo, &text)?,
-        PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
-            paste_via_clipboard(&mut enigo, &text, &app_handle, &paste_method)?
-        }
-    }
+        Ok(())
+    })?;
 
     // After pasting, optionally copy to clipboard based on settings
     if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
