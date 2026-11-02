@@ -1,6 +1,6 @@
 [package]
 name = "babbl"
-version = "0.2.4"
+version = "0.2.5"
 description = "Babbl"
 authors = ["cjpais"]
 edition = "2021"
