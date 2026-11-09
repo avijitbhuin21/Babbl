@@ -99,6 +99,26 @@ if (typeof window !== "undefined") {
         if (cmd === "send_meeting_mom_email") {
           return null;
         }
+        if (cmd === "ask_meeting_assistant") {
+          const q = (args?.request?.query || "").toLowerCase();
+          let reply = "I analyzed the meeting context. Everything looks on track!";
+          const tools_used: string[] = [];
+
+          if (q.includes("summary") || q.includes("summarize")) {
+            reply = "### Executive Meeting Summary\n\n- **Key Discussion Points**: Progress on Phase 1, 2, and 3 deliverables.\n- **Decisions Made**: Secure credential storage in desktop backend settings confirmed.\n- **Next Steps**: Merge review and release readiness.";
+            tools_used.push("get_live_meeting_transcript");
+          } else if (q.includes("verify") || q.includes("link") || q.includes("fact")) {
+            reply = "I verified the latest points against current documentation and public sources:\n\n- [Tauri Security & Storage Standards](https://tauri.app)\n- [RFC 5321 SMTP Delivery Specifications](https://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol)\n\nAll statements are consistent with official guidelines.";
+            tools_used.push("web_search_verification");
+          } else if (q.includes("past") || q.includes("history") || q.includes("decision")) {
+            reply = "I searched past meeting records in your local SQLite database:\n\n1. **Architecture Alignment** (Nov 9, 2026): Agreed to use read-only Copilot tools.\n2. **Infrastructure Clean-up** (Nov 9, 2026): Confirmed Windows loopback safety and mic-only fallback.";
+            tools_used.push("search_past_meetings");
+          } else {
+            reply = `Here is what I found regarding **"${args?.request?.query || "your query"}"**:\n\nThe meeting discussion focused on delivering structured, production-ready audio and AI copilot capabilities.`;
+          }
+
+          return { reply, tools_used };
+        }
         if (cmd === "get_meeting_status") {
           return { is_recording: false, elapsed_secs: 0 };
         }

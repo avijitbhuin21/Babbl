@@ -574,6 +574,53 @@
       "cancel": "Cancel",
       "send": "Send MOM Now",
       "sending": "Sending Email..."
+    },
+    "assistant": {
+      "title": "Meeting Intelligence Copilot",
+      "activeCopilot": "Active Copilot",
+      "capabilities": "Capabilities: Real-time Transcript Q&A • Web Fact Verification • Past Meeting Memory",
+      "welcome": "Hello! I am your **Meeting Intelligence Assistant**.\n\nHere is how I can help:\n- **Live Q&A & Copilot**: Ask me questions about what participants or you have spoken in the current call.\n- **Past Meeting Memory**: Search past decisions, attendees, and topics saved in your local SQLite history.\n- **Real-Time Fact Verification**: Ask me to verify claims or regulations, and I will search the web and provide direct markdown citation links.\n- **Action Items & Summaries**: Extract key takeaways, deadlines, and follow-ups instantly.",
+      "quickPromptsTitle": "Quick Prompts:",
+      "quickPrompts": {
+        "summarize": "Summarize discussion so far",
+        "summarizePrompt": "Can you provide a clear and concise summary of the key points discussed so far?",
+        "verify": "Verify last statement with web links",
+        "verifyPrompt": "Please verify the facts and statements from the discussion on the web, and provide reliable citation links.",
+        "searchPast": "Search past meeting decisions",
+        "searchPastPrompt": "Can you search past meetings in the database and list what decisions or action items were agreed upon previously?",
+        "actionItems": "Extract action items & next steps",
+        "actionItemsPrompt": "Extract all action items, assignees, and next steps mentioned in this meeting.",
+        "unanswered": "What questions remain unanswered?",
+        "unansweredPrompt": "Review the discussion and list any open questions or concerns that were raised but not yet answered."
+      },
+      "context": {
+        "meetingPrefix": "Meeting:",
+        "liveMeeting": "Live Meeting ({{turns}} turns)",
+        "transcriptWords": "Transcript ({{words}} words)",
+        "noTranscript": "No meeting transcript",
+        "detachPast": "Detach past meeting context",
+        "loadedToast": "Loaded past meeting \"{{title}}\" into Copilot context."
+      },
+      "liveBanner": {
+        "inProgress": "Live Meeting In Progress",
+        "turnsLive": "{{turns}} turns transcribed live",
+        "hint": "Copilot automatically knows what was spoken up to this second"
+      },
+      "chat": {
+        "toolsInvoked": "Tools invoked:",
+        "webVerification": "Web Verification",
+        "pastMemory": "Past Meeting Memory",
+        "liveTranscript": "Live Transcript",
+        "analyzing": "Analyzing transcript, executing tools & verifying...",
+        "inputPlaceholder": "Ask anything about this meeting, search past decisions, or verify facts...",
+        "sendTitle": "Send Message (Enter)",
+        "inputHint": "Press Enter to send, Shift+Enter for new line",
+        "privacyHint": "Privacy: Audio stays local; questions use configured Refine model",
+        "clearTitle": "Clear Chat History",
+        "clearedToast": "Cleared conversation history",
+        "clearedWelcome": "Chat history cleared. How can I assist you with your meeting?",
+        "errorTitle": "Error communicating with assistant:"
+      }
     }
   }
 }

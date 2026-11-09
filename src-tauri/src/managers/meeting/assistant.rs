@@ -382,16 +382,18 @@ impl MeetingAssistantAgent {
 
             // If we have content and no pending tool calls, return final response!
             if !content.trim().is_empty() {
+                let cleaned_reply = crate::llm_client::strip_reasoning_blocks(&content);
                 return Ok(AssistantResponse {
-                    reply: content,
+                    reply: cleaned_reply,
                     tools_used,
                 });
             }
         }
 
         if !final_content.trim().is_empty() {
+            let cleaned_reply = crate::llm_client::strip_reasoning_blocks(&final_content);
             Ok(AssistantResponse {
-                reply: final_content,
+                reply: cleaned_reply,
                 tools_used,
             })
         } else {
@@ -442,6 +444,12 @@ impl MeetingAssistantAgent {
                     api_key = std::env::var("GROQ_API_KEY").unwrap_or_default();
                 } else if provider.id == "openai" {
                     api_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+                } else if provider.id == "gemini" {
+                    api_key = std::env::var("GEMINI_API_KEY").unwrap_or_default();
+                } else if provider.id == "openrouter" {
+                    api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
+                } else if provider.id == "custom" {
+                    api_key = "local-key".to_string(); // Local Ollama/custom server
                 }
             }
 
@@ -456,6 +464,9 @@ impl MeetingAssistantAgent {
                     model = match provider.id.as_str() {
                         "groq" => "openai/gpt-oss-120b".to_string(),
                         "openai" => "gpt-4o-mini".to_string(),
+                        "gemini" => "gemini-1.5-flash".to_string(),
+                        "openrouter" => "meta-llama/llama-3.1-8b-instruct".to_string(),
+                        "cerebras" => "llama3.1-8b".to_string(),
                         _ => "llama-3.1-8b-instant".to_string(),
                     };
                 }
@@ -464,7 +475,10 @@ impl MeetingAssistantAgent {
                     match provider.id.as_str() {
                         "groq" => "https://api.groq.com/openai/v1".to_string(),
                         "openai" => "https://api.openai.com/v1".to_string(),
+                        "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
                         "openrouter" => "https://openrouter.ai/api/v1".to_string(),
+                        "cerebras" => "https://api.cerebras.ai/v1".to_string(),
+                        "custom" => "http://localhost:11434/v1".to_string(),
                         _ => "https://api.groq.com/openai/v1".to_string(),
                     }
                 } else {
@@ -475,6 +489,6 @@ impl MeetingAssistantAgent {
             }
         }
 
-        Err("No API key configured for any LLM provider (Groq, OpenAI, etc.). Please add an API key in Settings -> Inference or Refine.".to_string())
+        Err("No API key configured for any LLM provider (Groq, OpenAI, Gemini, etc.). Please add an API key in Settings -> Inference or Refine.".to_string())
     }
 }
