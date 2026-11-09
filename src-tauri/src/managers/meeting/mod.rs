@@ -8,8 +8,8 @@ pub mod types;
 pub mod vad;
 
 pub use assistant::{
-    AssistantQueryRequest, AssistantResponse, ChatMessage, CodeExecutionResult,
-    MeetingAssistantAgent, SearchResult, WorkspaceFileEntry, WorkspaceManager,
+    AssistantQueryRequest, AssistantResponse, ChatMessage,
+    MeetingAssistantAgent, SearchResult,
 };
 pub use local_diarizer::LocalDiarizer;
 pub use manager::MeetingManager;

@@ -555,7 +555,7 @@
       "subjectLabel": "Email Subject",
       "subjectPlaceholder": "Meeting Summary",
       "attachmentTitle": "Full Transcript & AI Notes PDF Attached",
-      "attachmentDesc": "Includes complete speaker diarization, timestamps, and MOM",
+      "attachmentDesc": "Includes dual-track speaker separation, timestamps, and MOM",
       "rememberCredentials": "Save credentials securely in desktop settings",
       "rememberCredentialsDesc": "Stores your sender address and password in backend settings so you don't have to re-type them.",
       "clearCredentials": "Clear saved credentials",

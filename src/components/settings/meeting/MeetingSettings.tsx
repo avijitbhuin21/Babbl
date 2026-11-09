@@ -1011,7 +1011,7 @@ export const MeetingSettings: React.FC = () => {
                       {t("meeting.emailModal.attachmentTitle", "Full Transcript & AI Notes PDF Attached")}
                     </div>
                     <div className="text-[11px] text-text/40">
-                      {t("meeting.emailModal.attachmentDesc", "Includes complete speaker diarization, timestamps, and MOM")}
+                      {t("meeting.emailModal.attachmentDesc", "Includes dual-track speaker separation, timestamps, and MOM")}
                     </div>
                   </div>
                 </div>

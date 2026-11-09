@@ -585,7 +585,7 @@ pub async fn transcribe_audio(
         let tm = app_handle.state::<Arc<TranscriptionManager>>().inner().clone();
         if !tm.is_model_loaded() {
             // Attempt to load the selected model if not loaded yet
-            if let Err(e) = tm.load_model() {
+            if let Err(e) = tm.load_model(&settings.selected_model) {
                 return Err(format!(
                     "Local transcription model is not loaded ({}). Please check your selected model in Settings.",
                     e

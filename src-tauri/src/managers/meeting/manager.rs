@@ -488,7 +488,19 @@ impl MeetingManager {
         if transcript.segments.is_empty() {
             log::info!("Live transcript had no segments; running post-call pipeline fallback");
             let pipeline = MeetingPipeline::new(self.app_handle.clone(), self.transcription_manager.clone(), config.clone());
-            transcript = pipeline.process(&meeting_audio).await?;
+            transcript = match pipeline.process(&meeting_audio).await {
+                Ok(t) => t,
+                Err(e) => {
+                    let _ = self.app_handle.emit(
+                        "babbl://meeting_state",
+                        serde_json::json!({
+                            "is_recording": false,
+                            "is_processing": false,
+                        }),
+                    );
+                    return Err(e);
+                }
+            };
 
             // If English translation is enabled and segments contain non-English text, translate them
             if config.translate_to_english {
