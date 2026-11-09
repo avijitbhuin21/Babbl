@@ -224,12 +224,13 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     let autostart_manager = app_handle.autolaunch();
     let settings = settings::get_settings(&app_handle);
 
-    if settings.autostart_enabled {
-        // Enable autostart if user has opted in
-        let _ = autostart_manager.enable();
-    } else {
-        // Disable autostart if user has opted out
-        let _ = autostart_manager.disable();
+    // Dev builds must not register themselves as the login item.
+    if !cfg!(debug_assertions) {
+        if settings.autostart_enabled {
+            let _ = autostart_manager.enable();
+        } else {
+            let _ = autostart_manager.disable();
+        }
     }
 
     // Create the recording overlay window (hidden by default)
@@ -314,7 +315,10 @@ pub fn run() {
         clipboard_sync::commands::clipboard_sync_set_peer_clipboard,
         clipboard_sync::commands::clipboard_sync_set_peer_files,
         clipboard_sync::commands::share_pick_files,
-        clipboard_sync::commands::share_send_files,
+        clipboard_sync::commands::library_add,
+        clipboard_sync::commands::library_remove,
+        clipboard_sync::commands::library_browse,
+        clipboard_sync::commands::library_fetch,
         clipboard_sync::commands::share_open_folder,
         clipboard_sync::commands::share_clear_history,
         clipboard_sync::commands::share_open_path,

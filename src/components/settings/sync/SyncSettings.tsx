@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Laptop, MonitorSmartphone, Plus, Send } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardList, FolderUp, Laptop, MonitorSmartphone, Plus, Send } from "lucide-react";
 import { commands, type SyncConfig, type SyncStatus, type Result } from "@/bindings";
 import { SettingsGroup } from "../../ui/SettingsGroup";
 import { SettingContainer } from "../../ui/SettingContainer";
@@ -12,6 +12,7 @@ import { Input } from "../../ui/Input";
 import { useSyncStatus } from "../clipboard/useSyncStatus";
 import { AddMachineModal } from "./AddMachineModal";
 import { MachinePage } from "./MachinePage";
+import { MyFiles } from "./MyFiles";
 
 type Run = (action: () => Promise<Result<SyncStatus, string>>) => Promise<boolean>;
 type Peer = SyncStatus["peers"][number];
@@ -62,7 +63,7 @@ function ClipboardOptions({ status, run }: { status: SyncStatus; run: Run }) {
   };
 
   return (
-    <Collapsible title={t("sync.clipboardOptions", "Clipboard options")}>
+    <SettingsGroup title={t("sync.clipboardOptions", "Clipboard options")}>
       <SettingContainer
         title={t("sync.mode", "When to sync")}
         description={t("sync.modeDesc", "Sync every copy automatically, or only when you press Send.")}
@@ -137,7 +138,30 @@ function ClipboardOptions({ status, run }: { status: SyncStatus; run: Run }) {
           } · ${new Date(status.last_activity.at_ms).toLocaleTimeString()}`}
         </div>
       )}
-    </Collapsible>
+    </SettingsGroup>
+  );
+}
+
+/** Per-machine clipboard sync switches for the Clipboard sync page. */
+function ClipboardMachines({ status, run }: { status: SyncStatus; run: Run }) {
+  const { t } = useTranslation();
+  return (
+    <SettingsGroup>
+      {status.peers.map((p) => (
+        <ToggleSwitch
+          key={p.device_id}
+          label={p.name}
+          description={
+            p.connected
+              ? `${t("sync.online", "Online")} · ${p.via.join(" + ")}`
+              : `${t("sync.offline", "Offline")} · ${ago(p.last_seen_ms, t)}`
+          }
+          checked={p.clipboard}
+          onChange={(v) => run(() => commands.clipboardSyncSetPeerClipboard(p.device_id, v))}
+          grouped
+        />
+      ))}
+    </SettingsGroup>
   );
 }
 
@@ -214,9 +238,24 @@ function MachineCard({ peer, sharedCount, onOpen }: { peer: Peer; sharedCount: n
   );
 }
 
+type SyncMode = "clipboard" | "files";
+
+const MODE_KEY = "babbl.sync-tab";
+const MODES: { id: SyncMode; icon: typeof ClipboardList; key: string; fallback: string }[] = [
+  { id: "clipboard", icon: ClipboardList, key: "sync.tabClipboard", fallback: "Clipboard" },
+  { id: "files", icon: FolderUp, key: "sync.tabFiles", fallback: "Files" },
+];
+
 export const SyncSettings: React.FC = () => {
   const { t } = useTranslation();
   const { status, run } = useSyncStatus();
+  const [mode, setModeState] = useState<SyncMode>(() =>
+    localStorage.getItem(MODE_KEY) === "files" ? "files" : "clipboard",
+  );
+  const setMode = (m: SyncMode) => {
+    localStorage.setItem(MODE_KEY, m);
+    setModeState(m);
+  };
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState("");
@@ -228,7 +267,7 @@ export const SyncSettings: React.FC = () => {
   const c = status.config;
   const open = openId ? status.peers.find((p) => p.device_id === openId) : undefined;
 
-  if (c.enabled && open) {
+  if (mode === "files" && c.enabled && open) {
     return <MachinePage peer={open} status={status} run={run} onBack={() => setOpenId(null)} />;
   }
 
@@ -270,15 +309,32 @@ export const SyncSettings: React.FC = () => {
 
       {c.enabled && (
         <>
-          <div className="space-y-3">
-            <ClipboardOptions status={status} run={run} />
-            <ConnectionSettings status={status} run={run} />
+          <ConnectionSettings status={status} run={run} />
+
+          <div role="tablist" className="flex gap-1 p-1 rounded-xl bg-mid-gray/10">
+            {MODES.map(({ id, icon: Icon, key, fallback }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={mode === id}
+                onClick={() => setMode(id)}
+                className={`flex-1 inline-flex items-center justify-center gap-2 py-2 text-sm rounded-lg cursor-pointer transition-colors ${
+                  mode === id ? "bg-background-ui text-white" : "text-text/70 hover:bg-mid-gray/15"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {t(key, fallback)}
+              </button>
+            ))}
           </div>
+
+          {mode === "files" && <MyFiles status={status} run={run} />}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-xs font-semibold text-text/50 uppercase tracking-wider">
-                {t("sync.machines", "Machines")}
+                {mode === "files" ? t("library.browse", "Browse other machines") : t("sync.clipboardMachines", "Sync clipboard with")}
               </h2>
               {status.peers.length > 0 && (
                 <Button size="sm" onClick={() => setAdding(true)}>
@@ -301,21 +357,24 @@ export const SyncSettings: React.FC = () => {
                   {t("sync.addFirstHint", "Pair another computer on your network or over the internet.")}
                 </span>
               </button>
-            ) : (
+            ) : mode === "files" ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {status.peers.map((p) => (
                   <MachineCard
                     key={p.device_id}
                     peer={p}
-                    sharedCount={status.shares
-                      .filter((s) => s.peer_ids.includes(p.device_id))
-                      .reduce((n, s) => n + s.files.length, 0)}
+                    sharedCount={
+                      status.remote_libraries.find((l) => l.device_id === p.device_id && l.allowed)?.files.length ?? 0
+                    }
                     onOpen={() => setOpenId(p.device_id)}
                   />
                 ))}
               </div>
+            ) : (
+              <ClipboardMachines status={status} run={run} />
             )}
           </div>
+          {mode === "clipboard" && <ClipboardOptions status={status} run={run} />}
           <AddMachineModal open={adding} onClose={() => setAdding(false)} status={status} run={run} />
         </>
       )}

@@ -343,19 +343,55 @@ async fn targeted_clipboard_and_shares() {
     assert!(err.contains("turned off"), "unexpected error: {}", err);
     alice.set_peer_files(&carol_id, true);
 
-    // Watched folder: a file dropped into "Send to Bob" is sent to Bob and moved to Sent.
-    super::outbox::ensure_layout(&alice);
-    let bob_outbox = super::outbox::outbox_dir_for(&alice, Some(&bob_id)).unwrap();
-    assert!(bob_outbox.ends_with("Send to Bob"));
-    std::fs::write(bob_outbox.join("drop.txt"), b"dropped").unwrap();
-    super::outbox::scan(&alice);
-    super::outbox::scan(&alice);
-    let bob_file = bob.storage_dir().join("Received").join("Alice").join("drop.txt");
-    wait_until("outbox share on Bob", Duration::from_secs(10), || bob_file.exists()).await;
-    assert_eq!(std::fs::read(&bob_file).unwrap(), b"dropped");
-    assert!(!bob_outbox.join("drop.txt").exists());
-    assert!(alice.storage_dir().join("Sent").join("drop.txt").exists());
-    assert!(!carol.storage_dir().join("Received").join("Alice").join("drop.txt").exists());
+    // Shared files: Bob browses Alice's library and downloads a file and a zipped folder.
+    let (alice_id, _) = alice.device();
+    let folder = src.join("album");
+    std::fs::create_dir_all(folder.join("sub")).unwrap();
+    std::fs::write(folder.join("a.txt"), b"one").unwrap();
+    std::fs::write(folder.join("sub").join("b.txt"), b"two").unwrap();
+    std::fs::write(src.join("lib.txt"), b"library").unwrap();
+    let added = super::library::add(&alice, &[src.join("lib.txt"), folder.clone()]).unwrap();
+    assert_eq!(added, vec!["lib.txt".to_string(), "album.zip".to_string()]);
+    assert!(super::library::resolve(&alice, "../clipboard_sync.json").is_none());
+
+    bob.request_library(&alice_id).unwrap();
+    wait_until("library list on Bob", Duration::from_secs(10), || {
+        bob.status()
+            .remote_libraries
+            .iter()
+            .any(|l| l.device_id == alice_id && l.allowed && l.files.len() == 2)
+    })
+    .await;
+
+    bob.fetch_shared(&alice_id, "lib.txt").unwrap();
+    let fetched = bob.storage_dir().join("Received").join("Alice").join("lib.txt");
+    wait_until("fetched file on Bob", Duration::from_secs(10), || fetched.exists()).await;
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"library");
+
+    bob.fetch_shared(&alice_id, "album.zip").unwrap();
+    let zip_path = bob.storage_dir().join("Received").join("Alice").join("album.zip");
+    wait_until("fetched zip on Bob", Duration::from_secs(10), || zip_path.exists()).await;
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(&zip_path).unwrap()).unwrap();
+    let mut body = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name("album/sub/b.txt").unwrap(), &mut body).unwrap();
+    assert_eq!(body, "two");
+
+    // Hiding the library from Bob: his list empties and downloads are refused.
+    alice.set_peer_files(&bob_id, false);
+    wait_until("hidden library on Bob", Duration::from_secs(10), || {
+        bob.status()
+            .remote_libraries
+            .iter()
+            .any(|l| l.device_id == alice_id && !l.allowed && l.files.is_empty())
+    })
+    .await;
+    std::fs::remove_file(&fetched).unwrap();
+    bob.fetch_shared(&alice_id, "lib.txt").unwrap();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(!fetched.exists());
+
+    super::library::remove(&alice, "lib.txt").unwrap();
+    assert_eq!(super::library::list(&alice).len(), 1);
 
     server.abort();
     for d in [alice_dir, bob_dir, carol_dir] {

@@ -90,6 +90,7 @@ bytes = "1"
 tauri-plugin-dialog = "2.4.2"
 zstd = "0.13"
 if-addrs = "0.13"
+zip = { version = "4", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"

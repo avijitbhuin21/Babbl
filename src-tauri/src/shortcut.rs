@@ -829,9 +829,35 @@ pub async fn fetch_online_transcription_models(provider_id: String) -> Result<Ve
         ));
     }
 
+    let data = fetch_openrouter_models("").await?;
+    // Speech-to-text models are only listed when asked for by output modality.
+    let stt: std::collections::HashSet<String> =
+        fetch_openrouter_models("?output_modalities=transcription")
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|entry| entry.get("id").and_then(|i| i.as_str()).map(String::from))
+            .collect();
+    let mut models: Vec<String> = data
+        .iter()
+        .filter(|entry| {
+            model_has_modality(entry, "input_modalities", "audio")
+                && model_has_modality(entry, "output_modalities", "text")
+        })
+        .filter_map(|entry| entry.get("id").and_then(|i| i.as_str()).map(String::from))
+        .chain(stt.iter().cloned())
+        .collect();
+    models.sort();
+    models.dedup();
+    *OPENROUTER_STT_MODELS.lock().await = Some(stt);
+    Ok(models)
+}
+
+/// Fetches OpenRouter's public model catalogue with an optional query string.
+async fn fetch_openrouter_models(query: &str) -> Result<Vec<serde_json::Value>, String> {
     // OpenRouter's model catalogue is public, so no API key is needed.
     let response = reqwest::Client::new()
-        .get("https://openrouter.ai/api/v1/models")
+        .get(format!("https://openrouter.ai/api/v1/models{}", query))
         .header("HTTP-Referer", "https://github.com/avijitbhuin21/Babbl")
         .header("X-Title", "Babbl")
         .send()
@@ -846,22 +872,24 @@ pub async fn fetch_online_transcription_models(provider_id: String) -> Result<Ve
         .json()
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
+    Ok(parsed.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default())
+}
 
-    let mut models: Vec<String> = parsed
-        .get("data")
-        .and_then(|d| d.as_array())
-        .map(|data| {
-            data.iter()
-                .filter(|entry| {
-                    model_has_modality(entry, "input_modalities", "audio")
-                        && model_has_modality(entry, "output_modalities", "text")
-                })
-                .filter_map(|entry| entry.get("id").and_then(|i| i.as_str()).map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    models.sort();
-    Ok(models)
+static OPENROUTER_STT_MODELS: tokio::sync::Mutex<Option<std::collections::HashSet<String>>> =
+    tokio::sync::Mutex::const_new(None);
+
+/// True when an OpenRouter model must go through the dedicated /audio/transcriptions endpoint.
+pub async fn is_openrouter_stt_model(model: &str) -> bool {
+    if OPENROUTER_STT_MODELS.lock().await.is_none() {
+        let _ = fetch_online_transcription_models("openrouter".to_string()).await;
+    }
+    match OPENROUTER_STT_MODELS.lock().await.as_ref() {
+        Some(set) => set.contains(model),
+        None => {
+            let m = model.to_lowercase();
+            m.contains("transcribe") || m.contains("whisper") || m.contains("stt")
+        }
+    }
 }
 
 #[tauri::command]

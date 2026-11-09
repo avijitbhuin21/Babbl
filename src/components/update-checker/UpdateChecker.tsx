@@ -3,11 +3,15 @@ import { useTranslation } from "react-i18next";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
+import { ArrowUpCircle } from "lucide-react";
 import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
 
 interface UpdateCheckerProps {
   className?: string;
+  /** Rail layout: shows the version, and an update icon when one is available. */
+  compact?: boolean;
+  version?: string;
 }
 
 /** Turns an updater exception into a short, user-readable cause. */
@@ -28,7 +32,7 @@ const describeUpdateError = (error: unknown): string => {
   return raw.length > 60 ? `${raw.slice(0, 57)}...` : raw || "unknown error";
 };
 
-const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
+const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "", compact = false, version = "" }) => {
   const { t } = useTranslation();
   // Update checking state
   const [isChecking, setIsChecking] = useState(false);
@@ -211,6 +215,25 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const isUpdateDisabled = !updateChecksEnabled || isChecking || isInstalling;
   const isUpdateClickable =
     !isUpdateDisabled && (updateAvailable || errorText !== null || (!isChecking && !showUpToDate));
+
+  if (compact) {
+    const highlight = updateAvailable || isInstalling;
+    return (
+      <button
+        type="button"
+        onClick={isUpdateClickable ? getUpdateStatusAction() : undefined}
+        disabled={!isUpdateClickable}
+        title={getUpdateStatusText()}
+        aria-label={getUpdateStatusText()}
+        className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 text-[10px] tabular-nums transition-colors cursor-pointer disabled:cursor-default ${
+          highlight ? "text-background-ui hover:bg-background-ui/10" : errorText ? "text-red-400/80" : "text-text/40 hover:text-text/70"
+        } ${className}`}
+      >
+        {highlight && <ArrowUpCircle size={16} className={isInstalling ? "animate-pulse" : ""} />}
+        <span>{isInstalling && downloadProgress > 0 ? `${downloadProgress}%` : `v${version}`}</span>
+      </button>
+    );
+  }
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>

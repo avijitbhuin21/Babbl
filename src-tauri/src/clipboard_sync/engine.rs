@@ -2,6 +2,7 @@
 
 use super::clip_io::{now_ms, ApplyContent, IoCmd, IoConfig};
 use super::crypto::{self, FrameCipher};
+use super::library::SharedFile;
 use super::protocol::{ClipContent, ClipMsg, FileMeta, Msg, ShareMsg, PROTOCOL_VERSION};
 use super::store::{SyncConfig, SyncStore};
 use bytes::Bytes;
@@ -268,6 +269,15 @@ pub struct PairingInfo {
 }
 
 #[derive(Clone, Serialize, Type)]
+pub struct RemoteLibrary {
+    pub device_id: String,
+    /// False when that device has hidden its shared files from this one.
+    pub allowed: bool,
+    pub files: Vec<SharedFile>,
+    pub updated_ms: f64,
+}
+
+#[derive(Clone, Serialize, Type)]
 pub struct SyncStatus {
     pub config: SyncConfig,
     pub device_id: String,
@@ -275,6 +285,10 @@ pub struct SyncStatus {
     pub in_group: bool,
     pub group_fingerprint: Option<String>,
     pub peers: Vec<PeerStatus>,
+    /// This device's shared files.
+    pub library: Vec<SharedFile>,
+    /// Last known shared-files list of each paired device.
+    pub remote_libraries: Vec<RemoteLibrary>,
     pub discovered: Vec<DiscoveredDevice>,
     pub lan: ServiceStatus,
     pub lan_port: Option<u16>,
@@ -292,6 +306,8 @@ pub struct SyncStatus {
 }
 
 pub struct Inner {
+    /// Weak handle to this engine, for spawning work from `&self` handlers.
+    me: std::sync::Weak<Inner>,
     pub host: Box<dyn Host>,
     pub store_path: PathBuf,
     history_path: PathBuf,
@@ -304,7 +320,9 @@ pub struct Inner {
     incoming: Mutex<HashMap<String, Incoming>>,
     outgoing: Mutex<HashMap<String, Outgoing>>,
     shares: Mutex<VecDeque<ShareRecord>>,
-    pub outbox: Mutex<super::outbox::OutboxState>,
+    /// Ids of downloads this device asked for; only these shares bypass the per-device files switch.
+    pending_fetches: Mutex<HashSet<String>>,
+    remote_libraries: Mutex<HashMap<String, RemoteLibrary>>,
     pub io_tx: Mutex<Option<std::sync::mpsc::Sender<IoCmd>>>,
     pub pairing: Mutex<Option<PairingSession>>,
     pub tasks: Mutex<Vec<tauri::async_runtime::JoinHandle<()>>>,
@@ -329,7 +347,8 @@ impl Inner {
         let cipher = store.group_key_bytes().map(|k| FrameCipher::for_group(&k));
         let history_path = host.data_dir().join("share_history.json");
         let history = load_share_history(&history_path);
-        Arc::new(Self {
+        Arc::new_cyclic(|me| Self {
+            me: me.clone(),
             host,
             store_path,
             history_path,
@@ -342,7 +361,8 @@ impl Inner {
             incoming: Mutex::new(HashMap::new()),
             outgoing: Mutex::new(HashMap::new()),
             shares: Mutex::new(history),
-            outbox: Mutex::new(Default::default()),
+            pending_fetches: Mutex::new(HashSet::new()),
+            remote_libraries: Mutex::new(HashMap::new()),
             io_tx: Mutex::new(None),
             pairing: Mutex::new(None),
             tasks: Mutex::new(Vec::new()),
@@ -613,9 +633,15 @@ impl Inner {
         }
     }
 
-    /// True if `path` is one of the files in the share history (the only paths the UI may open).
+    /// True if `path` is in the share history or the shared folder (the only paths the UI may open).
     pub fn is_shared_path(&self, path: &str) -> bool {
         let wanted = std::path::Path::new(path);
+        if wanted
+            .parent()
+            .is_some_and(|dir| paths_equal(dir, &super::library::shared_dir(self)))
+        {
+            return wanted.is_file();
+        }
         self.shares
             .lock()
             .unwrap()
@@ -750,6 +776,8 @@ impl Inner {
             in_group: key.is_some(),
             group_fingerprint: fingerprint,
             peers,
+            library: super::library::list(self),
+            remote_libraries: self.remote_libraries.lock().unwrap().values().cloned().collect(),
             discovered,
             lan: self.lan.lock().unwrap().clone(),
             lan_port: *self.lan_port.lock().unwrap(),
@@ -829,6 +857,27 @@ impl Inner {
                 compressed,
                 data,
             } => self.on_share_data(&share_id, file_index, offset, compressed, data),
+            // Library messages go to one device's direct link and are never forwarded.
+            Msg::LibraryRequest { from, to } if to == my_id => self.send_library_to(&from),
+            Msg::LibraryList {
+                from,
+                to,
+                allowed,
+                files,
+            } if to == my_id && from != my_id => {
+                self.remote_libraries.lock().unwrap().insert(
+                    from.clone(),
+                    RemoteLibrary {
+                        device_id: from,
+                        allowed,
+                        files,
+                        updated_ms: now_ms() as f64,
+                    },
+                );
+                self.mark_dirty();
+            }
+            Msg::FetchRequest { req_id, from, to, name } if to == my_id => self.on_fetch_request(req_id, from, name),
+            Msg::LibraryRequest { .. } | Msg::LibraryList { .. } | Msg::FetchRequest { .. } => {}
             // Shares go straight to each recipient's link, so they are never forwarded.
             Msg::Share(share) => {
                 if share.origin != my_id && self.mark_seen(format!("share:{}", share.id)) {
@@ -1138,7 +1187,8 @@ impl Inner {
         if !share.to.contains(&my_id) {
             return;
         }
-        if !self.store.lock().unwrap().files_allowed(&share.origin) {
+        let requested = self.pending_fetches.lock().unwrap().remove(&share.id);
+        if !requested && !self.store.lock().unwrap().files_allowed(&share.origin) {
             log::info!("[clipboard-sync] ignoring files from {} (file sharing off)", share.origin_name);
             return;
         }
@@ -1315,7 +1365,18 @@ impl Inner {
     }
 
     /// Validates a share, records it as "sending" and returns it ready to stream.
+    #[cfg(test)]
     pub fn prepare_share(&self, paths: Vec<PathBuf>, recipients: Vec<String>) -> Result<PreparedShare, String> {
+        self.prepare_share_as(paths, recipients, None)
+    }
+
+    /// Like `prepare_share`, reusing `id` (a download request id) when given.
+    fn prepare_share_as(
+        &self,
+        paths: Vec<PathBuf>,
+        recipients: Vec<String>,
+        id: Option<String>,
+    ) -> Result<PreparedShare, String> {
         if self.group_key().is_none() {
             return Err("Pair a device first".to_string());
         }
@@ -1352,7 +1413,7 @@ impl Inner {
         let summary = ClipContent::Files { files: files.clone() }.summary();
         let names: Vec<String> = to.iter().map(|id| self.peer_name(id)).collect();
         let (my_id, my_name) = self.device();
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         self.push_share(ShareRecord {
             id: id.clone(),
@@ -1576,7 +1637,95 @@ impl Inner {
                 p.files = enabled;
             }
         });
+        self.send_library_to(device_id);
         self.mark_dirty();
+    }
+
+    /// Sends one message to a device over its fastest direct link.
+    fn send_direct(&self, device_id: &str, msg: &Msg) -> Result<(), String> {
+        let (link, _) = self
+            .share_routes(&[device_id.to_string()])
+            .into_iter()
+            .next()
+            .ok_or("That machine is offline")?;
+        let frame = self.seal(msg).ok_or("This device is not in a sync group")?;
+        self.try_send(link, Out::Frame(frame));
+        Ok(())
+    }
+
+    /// Sends this device's shared-files list (empty and `allowed: false` if hidden) to one device.
+    pub fn send_library_to(&self, device_id: &str) {
+        let (my_id, _) = self.device();
+        let allowed = self.store.lock().unwrap().files_allowed(device_id);
+        let files = if allowed { super::library::list(self) } else { Vec::new() };
+        let msg = Msg::LibraryList {
+            from: my_id,
+            to: device_id.to_string(),
+            allowed,
+            files,
+        };
+        let _ = self.send_direct(device_id, &msg);
+    }
+
+    /// Pushes the current shared-files list to every connected device.
+    pub fn announce_library(&self) {
+        for id in self.connected_peer_ids() {
+            self.send_library_to(&id);
+        }
+        self.mark_dirty();
+    }
+
+    /// Asks a device for its shared-files list; the reply lands in `remote_libraries`.
+    pub fn request_library(&self, device_id: &str) -> Result<(), String> {
+        let (my_id, _) = self.device();
+        self.send_direct(
+            device_id,
+            &Msg::LibraryRequest {
+                from: my_id,
+                to: device_id.to_string(),
+            },
+        )
+    }
+
+    /// Asks a device to send one of its shared files; it arrives like a received share.
+    pub fn fetch_shared(&self, device_id: &str, name: &str) -> Result<(), String> {
+        let (my_id, _) = self.device();
+        let req_id = uuid::Uuid::new_v4().to_string();
+        self.pending_fetches.lock().unwrap().insert(req_id.clone());
+        let msg = Msg::FetchRequest {
+            req_id: req_id.clone(),
+            from: my_id,
+            to: device_id.to_string(),
+            name: name.to_string(),
+        };
+        if let Err(e) = self.send_direct(device_id, &msg) {
+            self.pending_fetches.lock().unwrap().remove(&req_id);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Serves a download request if the requester may see this device's shared files.
+    fn on_fetch_request(&self, req_id: String, from: String, name: String) {
+        let path = if self.store.lock().unwrap().files_allowed(&from) {
+            super::library::resolve(self, &name)
+        } else {
+            None
+        };
+        let Some(path) = path else {
+            log::info!("[clipboard-sync] refusing download of {:?} by {}", name, self.peer_name(&from));
+            self.send_library_to(&from);
+            return;
+        };
+        let Some(me) = self.me.upgrade() else { return };
+        match self.prepare_share_as(vec![path], vec![from], Some(req_id)) {
+            Ok(share) => {
+                tokio::spawn(async move {
+                    let _ = me.run_share(share).await;
+                });
+            }
+            Err(e) => log::warn!("[clipboard-sync] cannot serve download: {}", e),
+        }
     }
 }
 

@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Toaster, toast } from "sonner";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
-import Footer from "./components/footer";
-import Onboarding from "./components/onboarding";
-import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
+import { Sidebar, RAIL_ITEMS, TRANSCRIBE_PAGES, useTranscribePages } from "./components/Sidebar";
 import { useSettings } from "./hooks/useSettings";
+import { useNavStore } from "./stores/navStore";
 import { commands } from "@/bindings";
 
 interface AppErrorPayload {
@@ -15,23 +14,17 @@ interface AppErrorPayload {
   message: string;
 }
 
-const renderSettingsContent = (section: SidebarSection) => {
-  const ActiveComponent =
-    SECTIONS_CONFIG[section]?.component || SECTIONS_CONFIG.general.component;
-  return <ActiveComponent />;
-};
-
 function App() {
   const { t } = useTranslation();
-  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
-  const [currentSection, setCurrentSection] =
-    useState<SidebarSection>("general");
-  const { settings, updateSetting, isLoading } = useSettings();
+  const { rail, transcribePage } = useNavStore();
+  const transcribePages = useTranscribePages();
+  const { settings, updateSetting } = useSettings();
 
-  useEffect(() => {
-    if (isLoading) return;
-    checkOnboardingStatus(settings?.use_online_provider ?? false);
-  }, [isLoading, settings?.use_online_provider]);
+  const page =
+    rail === "transcribe"
+      ? TRANSCRIBE_PAGES[transcribePages.includes(transcribePage) ? transcribePage : "general"]
+      : RAIL_ITEMS[rail];
+  const ActivePage = page.component;
 
   useEffect(() => {
     const unlisten = listen<AppErrorPayload>("babbl://error", (event) => {
@@ -51,7 +44,7 @@ function App() {
         duration: 8000,
         action: {
           label: "Open",
-          onClick: () => commands.shareOpenFolder("received", null),
+          onClick: () => commands.shareOpenFolder("received"),
         },
       });
     });
@@ -85,58 +78,25 @@ function App() {
     };
   }, [settings?.debug_mode, updateSetting]);
 
-  const checkOnboardingStatus = async (useOnlineProvider: boolean) => {
-    if (useOnlineProvider) {
-      setShowOnboarding(false);
-      return;
-    }
-    try {
-      // Always check if they have any models available
-      const result = await commands.hasAnyModelsAvailable();
-      if (result.status === "ok") {
-        setShowOnboarding(!result.data);
-      } else {
-        setShowOnboarding(true);
-      }
-    } catch (error) {
-      console.error("Failed to check onboarding status:", error);
-      setShowOnboarding(true);
-    }
-  };
-
-  const handleModelSelected = () => {
-    // Transition to main app - user has started a download
-    setShowOnboarding(false);
-  };
-
-  if (showOnboarding) {
-    return <Onboarding onModelSelected={handleModelSelected} />;
-  }
-
   return (
     <div className="h-screen flex flex-col bg-background">
       <Toaster position="bottom-right" richColors closeButton theme="dark" />
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar
-          activeSection={currentSection}
-          onSectionChange={setCurrentSection}
-        />
+        <Sidebar />
         {/* Scrollable content area with more breathing room */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col py-8 px-8 gap-6 max-w-3xl mx-auto w-full">
+            <div className="flex flex-col py-8 px-6 gap-6 max-w-3xl mx-auto w-full">
               <h1 className="text-lg font-semibold text-text/90 tracking-tight">
-                {t(SECTIONS_CONFIG[currentSection]?.labelKey ?? SECTIONS_CONFIG.general.labelKey)}
+                {t(page.labelKey, page.fallback)}
               </h1>
               <AccessibilityPermissions />
-              {renderSettingsContent(currentSection)}
+              <ActivePage />
             </div>
           </div>
         </div>
       </div>
-      {/* Fixed footer at bottom */}
-      <Footer />
     </div>
   );
 }

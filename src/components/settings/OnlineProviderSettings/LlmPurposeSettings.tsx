@@ -9,6 +9,8 @@ import type { DropdownOption } from "../../ui/Dropdown";
 import { useSettings } from "../../../hooks/useSettings";
 
 const APPLE_PROVIDER_ID = "apple_intelligence";
+// Refine offers the same providers as cloud transcription.
+const REFINE_PROVIDER_IDS = new Set(["openai", "groq", "gemini", "openrouter"]);
 
 interface LlmPurposeSettingsProps {
   purpose: "postprocess" | "refine";
@@ -30,14 +32,17 @@ export const LlmPurposeSettings: React.FC<LlmPurposeSettingsProps> = ({ purpose 
   } = useSettings();
 
   const providers = (settings?.post_process_providers || []).filter(
-    (p) => purpose === "postprocess" || p.id !== APPLE_PROVIDER_ID,
+    (p) => (purpose === "postprocess" ? true : REFINE_PROVIDER_IDS.has(p.id)),
   );
 
   const postProviderId = settings?.post_process_provider_id || providers[0]?.id || "openai";
-  const selectedProviderId =
+  const requestedProviderId =
     purpose === "refine"
       ? settings?.refine_provider_id?.trim() || postProviderId
       : postProviderId;
+  const selectedProviderId = providers.some((p) => p.id === requestedProviderId)
+    ? requestedProviderId
+    : providers[0]?.id || requestedProviderId;
 
   const selectedProvider = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const isAppleProvider = selectedProvider?.id === APPLE_PROVIDER_ID;
@@ -149,6 +154,7 @@ export const LlmPurposeSettings: React.FC<LlmPurposeSettingsProps> = ({ purpose 
         </SettingContainer>
       )}
 
+      {(isAppleProvider || apiKey.trim() !== "") && (
       <SettingContainer
         title={t("settings.postProcessing.api.model.title")}
         description={t("settings.postProcessing.api.model.descriptionDefault")}
@@ -175,6 +181,7 @@ export const LlmPurposeSettings: React.FC<LlmPurposeSettingsProps> = ({ purpose 
           providerId={`${purpose}:${selectedProviderId}`}
         />
       </SettingContainer>
+      )}
     </>
   );
 };

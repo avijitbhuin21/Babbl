@@ -493,23 +493,56 @@ async sharePickFiles() : Promise<Result<string[], string>> {
 }
 },
 /**
- * Starts sharing files with the given devices; returns a summary once the transfer has begun.
+ * Copies files into this device's shared files (folders are zipped first).
  */
-async shareSendFiles(paths: string[], deviceIds: string[]) : Promise<Result<string, string>> {
+async libraryAdd(paths: string[]) : Promise<Result<SyncStatus, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("share_send_files", { paths, deviceIds }) };
+    return { status: "ok", data: await TAURI_INVOKE("library_add", { paths }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Opens the storage folder, a device's "Send to" folder, or a received-files folder.
- * `which`: "root", "received", "sent", "outbox" (with `device_id`, or everyone when None).
+ * Deletes a file from this device's shared files.
  */
-async shareOpenFolder(which: string, deviceId: string | null) : Promise<Result<null, string>> {
+async libraryRemove(name: string) : Promise<Result<SyncStatus, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("share_open_folder", { which, deviceId }) };
+    return { status: "ok", data: await TAURI_INVOKE("library_remove", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Asks a paired device for its shared-files list (arrives through the status event).
+ */
+async libraryBrowse(deviceId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("library_browse", { deviceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Downloads one shared file from a paired device into storage/Received.
+ */
+async libraryFetch(deviceId: string, name: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("library_fetch", { deviceId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the storage folder, the shared-files folder or the received-files folder.
+ * `which`: "root", "received", "shared".
+ */
+async shareOpenFolder(which: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("share_open_folder", { which }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -902,8 +935,10 @@ async updateRecordingRetentionPeriod(period: string) : Promise<Result<null, stri
 }
 },
 /**
- * Stub implementation for non-macOS platforms
- * Always returns false since laptop detection is macOS-specific
+ * Checks if the Mac is a laptop by detecting battery presence
+ * 
+ * This uses pmset to check for battery information.
+ * Returns true if a battery is detected (laptop), false otherwise (desktop)
  */
 async isLaptop() : Promise<Result<boolean, string>> {
     try {
@@ -973,6 +1008,11 @@ clipboard: boolean;
 files: boolean }
 export type PostProcessProvider = { id: string; label: string; base_url: string; allow_base_url_edit?: boolean; models_endpoint?: string | null }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
+export type RemoteLibrary = { device_id: string; 
+/**
+ * False when that device has hidden its shared files from this one.
+ */
+allowed: boolean; files: SharedFile[]; updated_ms: number }
 export type RemoteUrlStatus = { url: string; connected: boolean; error: string | null }
 export type ServiceStatus = { 
 /**
@@ -1000,6 +1040,7 @@ state: string; error: string | null;
  * Folder the received files were saved into.
  */
 folder: string | null; at_ms: number }
+export type SharedFile = { name: string; size: number; modified_ms: number }
 export type ShortcutBinding = { id: string; name: string; description: string; default_binding: string; current_binding: string }
 export type SoundTheme = "marimba" | "pop" | "custom"
 /**
@@ -1010,7 +1051,15 @@ export type SyncConfig = { enabled: boolean;
  * true = sync every copy automatically; false = only when the user clicks "Send".
  */
 auto_send: boolean; lan: boolean; relay: boolean; relay_url: string; tunnel: boolean; sync_text: boolean; sync_images: boolean; sync_files: boolean; max_file_mb: number }
-export type SyncStatus = { config: SyncConfig; device_id: string; device_name: string; in_group: boolean; group_fingerprint: string | null; peers: PeerStatus[]; discovered: DiscoveredDevice[]; lan: ServiceStatus; lan_port: number | null; 
+export type SyncStatus = { config: SyncConfig; device_id: string; device_name: string; in_group: boolean; group_fingerprint: string | null; peers: PeerStatus[]; 
+/**
+ * This device's shared files.
+ */
+library: SharedFile[]; 
+/**
+ * Last known shared-files list of each paired device.
+ */
+remote_libraries: RemoteLibrary[]; discovered: DiscoveredDevice[]; lan: ServiceStatus; lan_port: number | null; 
 /**
  * This machine's addresses other LAN devices can pair with ("ip:port").
  */

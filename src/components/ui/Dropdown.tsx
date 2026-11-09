@@ -15,6 +15,8 @@ interface DropdownProps {
   placeholder?: string;
   disabled?: boolean;
   onRefresh?: () => void;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -25,10 +27,19 @@ export const Dropdown: React.FC<DropdownProps> = ({
   placeholder = "Select an option...",
   disabled = false,
   onRefresh,
+  searchable = false,
+  searchPlaceholder,
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) setQuery("");
+    else if (searchable) searchRef.current?.focus();
+  }, [isOpen, searchable]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,6 +57,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
   const selectedOption = options.find(
     (option) => option.value === selectedValue,
   );
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
+    : options;
 
   const handleSelect = (value: string) => {
     onSelect(value);
@@ -85,13 +100,28 @@ export const Dropdown: React.FC<DropdownProps> = ({
         </svg>
       </button>
       {isOpen && !disabled && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-mid-gray/80 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
-          {options.length === 0 ? (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-mid-gray/80 rounded shadow-lg z-50 max-h-72 flex flex-col">
+          {searchable && (
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setIsOpen(false);
+                if (e.key === "Enter" && shown[0] && !shown[0].disabled) handleSelect(shown[0].value);
+              }}
+              placeholder={searchPlaceholder ?? t("common.search", "Search...")}
+              className="m-1 rounded border border-mid-gray/40 bg-mid-gray/10 px-2 py-1 text-sm focus:border-background-ui/60 focus:outline-none"
+            />
+          )}
+          <div className="overflow-y-auto">
+          {shown.length === 0 ? (
             <div className="px-2 py-1 text-sm text-mid-gray">
               {t("common.noOptionsFound")}
             </div>
           ) : (
-            options.map((option) => (
+            shown.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -106,6 +136,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
               </button>
             ))
           )}
+          </div>
         </div>
       )}
     </div>

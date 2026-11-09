@@ -122,7 +122,7 @@ fn file_len(path: &Path) -> u64 {
 }
 
 /// Hex SHA-256 of a file, read in 1 MiB chunks.
-fn sha256_file(path: &Path) -> std::io::Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];

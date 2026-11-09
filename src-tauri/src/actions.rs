@@ -76,6 +76,14 @@ async fn transcribe_online(
     language: Option<String>,
     translate_to_english: bool,
 ) -> Result<String, String> {
+    if provider.provider_id == "gemini" && is_gemini_transcribe_model(&provider.model) {
+        return transcribe_gemini_native(provider, audio_samples, language).await;
+    }
+    if provider.provider_id == "openrouter"
+        && crate::shortcut::is_openrouter_stt_model(&provider.model).await
+    {
+        return transcribe_openrouter_stt(provider, audio_samples, language).await;
+    }
     // Providers without a Whisper-style audio endpoint use chat completions with audio input
     if provider.provider_id == "gemini" || provider.provider_id == "openrouter" {
         return transcribe_online_chat_audio(provider, audio_samples, language, translate_to_english).await;
@@ -225,6 +233,135 @@ async fn transcribe_online(
         text.len()
     );
 
+    Ok(text)
+}
+
+/// True for Gemini's dedicated speech-to-text models, which the OpenAI-compatible endpoint does not serve.
+fn is_gemini_transcribe_model(model: &str) -> bool {
+    model.to_lowercase().contains("transcribe")
+}
+
+/// Sends a non-empty language hint unless it is "auto".
+fn language_hint(language: &Option<String>) -> Option<String> {
+    language.as_ref().filter(|l| !l.is_empty() && l.as_str() != "auto").cloned()
+}
+
+/// Transcribe via Gemini's native generateContent API (needed for gemini-*-transcribe models).
+async fn transcribe_gemini_native(
+    provider: OnlineTranscriptionProvider,
+    audio_samples: Vec<f32>,
+    language: Option<String>,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use log::info;
+
+    let wav_data = convert_samples_to_wav(&audio_samples)?;
+    let endpoint = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        provider.model
+    );
+    info!("[Cloud Transcription - gemini] Native request to {}", endpoint);
+
+    let mut body = serde_json::json!({
+        "contents": [{
+            "parts": [{ "inline_data": { "mime_type": "audio/wav", "data": BASE64.encode(&wav_data) } }]
+        }]
+    });
+    if let Some(lang) = language_hint(&language) {
+        body["generationConfig"] = serde_json::json!({
+            "audioTranscriptionConfig": { "languageCodes": [lang] }
+        });
+    }
+
+    let response = reqwest::Client::new()
+        .post(&endpoint)
+        .header("x-goog-api-key", &provider.api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send transcription request: {}", e))?;
+
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+    if !status.is_success() {
+        error!("[Cloud Transcription - gemini] API ERROR {}: {}", status, response_text);
+        return Err(format!("gemini transcription failed ({}): {}", status, response_text));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&response_text)
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    // Transcribe models put the transcript in an `audioTranscription` part rather than a text part.
+    let text = parsed["candidates"][0]["content"]["parts"]
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|p| {
+                    p.get("audioTranscription")
+                        .and_then(|t| t.get("text"))
+                        .or_else(|| p.get("text"))
+                        .and_then(|t| t.as_str())
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    info!("[Cloud Transcription - gemini] SUCCESS - Transcribed {} chars", text.len());
+    Ok(text)
+}
+
+/// Transcribe via OpenRouter's dedicated speech-to-text endpoint (JSON body with base64 audio).
+async fn transcribe_openrouter_stt(
+    provider: OnlineTranscriptionProvider,
+    audio_samples: Vec<f32>,
+    language: Option<String>,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use log::info;
+
+    let wav_data = convert_samples_to_wav(&audio_samples)?;
+    let endpoint = format!("{}/audio/transcriptions", provider.base_url.trim_end_matches('/'));
+    info!("[Cloud Transcription - openrouter] STT request for {}", provider.model);
+
+    let mut body = serde_json::json!({
+        "model": provider.model,
+        "input_audio": { "data": BASE64.encode(&wav_data), "format": "wav" }
+    });
+    if let Some(lang) = language_hint(&language) {
+        body["language"] = serde_json::Value::String(lang);
+    }
+
+    let response = reqwest::Client::new()
+        .post(&endpoint)
+        .bearer_auth(&provider.api_key)
+        .header("HTTP-Referer", "https://github.com/avijitbhuin21/Babbl")
+        .header("X-Title", "Babbl")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send transcription request: {}", e))?;
+
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+    if !status.is_success() {
+        error!("[Cloud Transcription - openrouter] API ERROR {}: {}", status, response_text);
+        return Err(format!("openrouter transcription failed ({}): {}", status, response_text));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&response_text)
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let text = parsed["text"].as_str().unwrap_or("").trim().to_string();
+    info!("[Cloud Transcription - openrouter] SUCCESS - Transcribed {} chars", text.len());
     Ok(text)
 }
 
@@ -398,11 +535,11 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
         .unwrap_or_else(|| {
             // Default models per provider
             match provider_id.as_str() {
-                "openai" => "whisper-1".to_string(),
+                "openai" => "gpt-transcribe".to_string(),
                 "groq" => "whisper-large-v3-turbo".to_string(),
-                "gemini" => "gemini-2.5-flash".to_string(),
-                "openrouter" => "google/gemini-2.5-flash".to_string(),
-                _ => "whisper-1".to_string(),
+                "gemini" => "gemini-3.5-transcribe".to_string(),
+                "openrouter" => "openai/gpt-transcribe".to_string(),
+                _ => "gpt-transcribe".to_string(),
             }
         });
 

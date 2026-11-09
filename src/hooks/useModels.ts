@@ -187,6 +187,24 @@ export const useModels = () => {
       },
     );
 
+    const cancelledUnlisten = listen<string>(
+      "model-download-cancelled",
+      (event) => {
+        const modelId = event.payload;
+        setDownloadingModels((prev) => {
+          const next = new Set(prev);
+          next.delete(modelId);
+          return next;
+        });
+        setDownloadProgress((prev) => {
+          const next = new Map(prev);
+          next.delete(modelId);
+          return next;
+        });
+        loadModels();
+      },
+    );
+
     // Listen for extraction events
     const extractionStartedUnlisten = listen<string>(
       "model-extraction-started",
@@ -226,6 +244,7 @@ export const useModels = () => {
     return () => {
       progressUnlisten.then((fn) => fn());
       completeUnlisten.then((fn) => fn());
+      cancelledUnlisten.then((fn) => fn());
       extractionStartedUnlisten.then((fn) => fn());
       extractionCompletedUnlisten.then((fn) => fn());
       extractionFailedUnlisten.then((fn) => fn());

@@ -1,11 +1,9 @@
 // Settings section components
 export { GeneralSettings } from "./general/GeneralSettings";
-export { AdvancedSettings } from "./advanced/AdvancedSettings";
 export { DebugSettings } from "./debug/DebugSettings";
 export { HistorySettings } from "./history/HistorySettings";
 export { AboutSettings } from "./about/AboutSettings";
 export { PostProcessingSettings } from "./post-processing/PostProcessingSettings";
-export { OnlineProviderSettings } from "./OnlineProviderSettings";
 export { SyncSettings } from "./sync/SyncSettings";
 
 // Individual setting components

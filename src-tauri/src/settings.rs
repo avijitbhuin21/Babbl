@@ -169,7 +169,7 @@ impl Default for PasteMethod {
 
 impl Default for ClipboardHandling {
     fn default() -> Self {
-        ClipboardHandling::DontModify
+        ClipboardHandling::CopyToClipboard
     }
 }
 
@@ -336,15 +336,15 @@ fn default_always_on_microphone() -> bool {
 }
 
 fn default_translate_to_english() -> bool {
-    false
+    true
 }
 
 fn default_start_hidden() -> bool {
-    false
+    true
 }
 
 fn default_autostart_enabled() -> bool {
-    false
+    true
 }
 
 fn default_update_checks_enabled() -> bool {
@@ -631,7 +631,7 @@ pub fn get_default_settings() -> AppSettings {
 
     AppSettings {
         bindings,
-        push_to_talk: true,
+        push_to_talk: false,
         audio_feedback: false,
         audio_feedback_volume: default_audio_feedback_volume(),
         sound_theme: default_sound_theme(),
@@ -643,7 +643,7 @@ pub fn get_default_settings() -> AppSettings {
         selected_microphone: None,
         clamshell_microphone: None,
         selected_output_device: None,
-        translate_to_english: false,
+        translate_to_english: default_translate_to_english(),
         selected_language: "auto".to_string(),
         overlay_position: default_overlay_position(),
         debug_mode: false,

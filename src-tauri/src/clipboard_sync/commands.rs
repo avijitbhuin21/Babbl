@@ -155,40 +155,59 @@ pub async fn share_pick_files(app: tauri::AppHandle) -> Result<Vec<String>, Stri
         .collect())
 }
 
-/// Starts sharing files with the given devices; returns a summary once the transfer has begun.
+/// Copies files into this device's shared files (folders are zipped first).
 #[tauri::command]
 #[specta::specta]
-pub fn share_send_files(paths: Vec<String>, device_ids: Vec<String>) -> Result<String, String> {
+pub async fn library_add(paths: Vec<String>) -> Result<SyncStatus, String> {
     let inner = engine()?;
-    if !inner.config().enabled {
-        return Err("Turn on device sync in the Clipboard section first".to_string());
-    }
-    let share = inner.prepare_share(paths.into_iter().map(std::path::PathBuf::from).collect(), device_ids)?;
-    let summary = share.summary.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Err(e) = inner.run_share(share).await {
-            if let Some(app) = super::app_handle() {
-                crate::notify::report_error(&app, "Share", &e);
-            }
-        }
-    });
-    Ok(summary)
+    let worker = inner.clone();
+    tokio::task::spawn_blocking(move || {
+        let paths: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+        super::library::add(&worker, &paths)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    inner.announce_library();
+    Ok(inner.status())
 }
 
-/// Opens the storage folder, a device's "Send to" folder, or a received-files folder.
-/// `which`: "root", "received", "sent", "outbox" (with `device_id`, or everyone when None).
+/// Deletes a file from this device's shared files.
 #[tauri::command]
 #[specta::specta]
-pub fn share_open_folder(app: tauri::AppHandle, which: String, device_id: Option<String>) -> Result<(), String> {
-    use super::outbox;
+pub fn library_remove(name: String) -> Result<SyncStatus, String> {
+    let inner = engine()?;
+    super::library::remove(&inner, &name)?;
+    inner.announce_library();
+    Ok(inner.status())
+}
+
+/// Asks a paired device for its shared-files list (arrives through the status event).
+#[tauri::command]
+#[specta::specta]
+pub fn library_browse(device_id: String) -> Result<(), String> {
+    engine()?.request_library(&device_id)
+}
+
+/// Downloads one shared file from a paired device into storage/Received.
+#[tauri::command]
+#[specta::specta]
+pub fn library_fetch(device_id: String, name: String) -> Result<(), String> {
+    engine()?.fetch_shared(&device_id, &name)
+}
+
+/// Opens the storage folder, the shared-files folder or the received-files folder.
+/// `which`: "root", "received", "shared".
+#[tauri::command]
+#[specta::specta]
+pub fn share_open_folder(app: tauri::AppHandle, which: String) -> Result<(), String> {
+    use super::library;
     use tauri_plugin_opener::OpenerExt;
     let inner = engine()?;
-    outbox::ensure_layout(&inner);
+    library::ensure_layout(&inner);
     let root = inner.storage_dir();
     let path = match which.as_str() {
-        "received" => root.join(outbox::RECEIVED_DIR),
-        "sent" => root.join(outbox::SENT_DIR),
-        "outbox" => outbox::outbox_dir_for(&inner, device_id.as_deref()).ok_or("Unknown device")?,
+        "received" => root.join(library::RECEIVED_DIR),
+        "shared" => root.join(library::SHARED_DIR),
         _ => root,
     };
     std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;

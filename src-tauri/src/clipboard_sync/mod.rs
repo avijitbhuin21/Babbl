@@ -6,7 +6,7 @@ pub mod crypto;
 mod discovery;
 pub mod engine;
 mod net;
-pub mod outbox;
+pub mod library;
 mod pairing;
 pub mod protocol;
 pub mod store;
@@ -81,9 +81,6 @@ pub fn init(app: &AppHandle) {
             tokio::time::sleep(Duration::from_millis(300)).await;
             tick += 1;
             ticker.flush_status();
-            if tick % 7 == 0 {
-                outbox::scan(&ticker);
-            }
             if tick % 50 == 0 && ticker.config().enabled {
                 discovery::reconnect_all(&ticker);
                 ticker.cleanup_stale_transfers();

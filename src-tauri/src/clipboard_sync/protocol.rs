@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 /// File data is sent in chunks of this size so relays and slow links never see huge frames.
 pub const FILE_CHUNK_SIZE: usize = 512 * 1024;
 /// Shares travel point-to-point, so they use bigger chunks (well under the relay's 12 MB frame cap).
@@ -114,6 +114,23 @@ pub enum Msg {
         device_id: String,
         name: String,
     },
+    /// Asks `to` for its shared-files list. Sent on a direct link, never forwarded.
+    LibraryRequest { from: String, to: String },
+    /// A device's shared-files list for `to` (also pushed unasked when the list changes).
+    /// `allowed` is false when the owner has hidden its files from `to`.
+    LibraryList {
+        from: String,
+        to: String,
+        allowed: bool,
+        files: Vec<super::library::SharedFile>,
+    },
+    /// Asks `to` to send one of its shared files; it answers with a Share whose id is `req_id`.
+    FetchRequest {
+        req_id: String,
+        from: String,
+        to: String,
+        name: String,
+    },
 }
 
 impl Msg {
@@ -131,7 +148,12 @@ impl Msg {
             Msg::ShareAck {
                 share_id, device_id, ..
             } => Some(format!("ack:{}:{}", share_id, device_id)),
-            Msg::Hello { .. } | Msg::Bye { .. } | Msg::ShareData { .. } => None,
+            Msg::Hello { .. }
+            | Msg::Bye { .. }
+            | Msg::ShareData { .. }
+            | Msg::LibraryRequest { .. }
+            | Msg::LibraryList { .. }
+            | Msg::FetchRequest { .. } => None,
         }
     }
 
@@ -234,6 +256,26 @@ mod tests {
                 file_index: 0,
                 offset: 0,
                 data: vec![1, 2, 3],
+            },
+            Msg::LibraryRequest {
+                from: "b".into(),
+                to: "a".into(),
+            },
+            Msg::LibraryList {
+                from: "a".into(),
+                to: "b".into(),
+                allowed: true,
+                files: vec![super::super::library::SharedFile {
+                    name: "photos.zip".into(),
+                    size: 1024.0,
+                    modified_ms: 7.0,
+                }],
+            },
+            Msg::FetchRequest {
+                req_id: "r".into(),
+                from: "b".into(),
+                to: "a".into(),
+                name: "photos.zip".into(),
             },
         ];
         for m in msgs {
