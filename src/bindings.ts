@@ -990,49 +990,9 @@ async askMeetingAssistant(request: AssistantQueryRequest) : Promise<Result<Assis
     else return { status: "error", error: e  as any };
 }
 },
-async getWorkspaceFiles(subpath?: string | null) : Promise<Result<WorkspaceFileEntry[], string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_workspace_files", { subpath: subpath ?? null }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async readWorkspaceFile(path: string) : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("read_workspace_file", { path }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async writeWorkspaceFile(path: string, content: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("write_workspace_file", { path, content }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async executeWorkspaceCode(language: string, code: string) : Promise<Result<CodeExecutionResult, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("execute_workspace_code", { language, code }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getPastMeetings(query?: string | null) : Promise<Result<PastMeetingRecord[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_past_meetings", { query: query ?? null }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async openWorkspaceFolder() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("open_workspace_folder") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1122,11 +1082,9 @@ export type MeetingResult = { transcript: MeetingTranscript; mom: MeetingMom | n
 export type MeetingStatus = { is_recording: boolean; elapsed_secs: number }
 export type SendMomEmailRequest = { sender_email: string; app_password: string; recipients: string[]; subject: string; mom_markdown: string; pdf_base64: string | null; pdf_filename: string | null }
 export type ChatMessage = { role: string; content: string }
-export type WorkspaceFileEntry = { name: string; relative_path: string; is_dir: boolean; size_bytes: number; modified_at: string }
-export type CodeExecutionResult = { language: string; stdout: string; stderr: string; exit_code: number; success: boolean }
 export type SearchResult = { title: string; snippet: string; url: string }
 export type AssistantQueryRequest = { query: string; current_transcript?: string | null; history: ChatMessage[] }
-export type AssistantResponse = { reply: string; tools_used: string[]; workspace_files: WorkspaceFileEntry[] }
+export type AssistantResponse = { reply: string; tools_used: string[] }
 export type PastMeetingRecord = { id: number; timestamp: number; created_at: string; title: string; duration_secs: number; participants: string[]; summary_markdown: string; full_transcript: string }
 /**
  * Complete structured meeting transcript.

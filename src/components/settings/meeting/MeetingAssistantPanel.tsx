@@ -258,7 +258,6 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
       </span>
     );
   };
-  };
 
   const activeTranscript = getActiveTranscriptText();
   const wordCount = activeTranscript ? activeTranscript.split(/\s+/).filter(Boolean).length : 0;
@@ -274,15 +273,15 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-semibold text-neutral-100">
-                Meeting AI Copilot & Workspace Agent
+                Meeting Intelligence Copilot
               </h3>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Autonomous Groq LLM
+                Active Copilot
               </span>
             </div>
             <p className="text-[11px] text-neutral-400">
-              Tool capabilities: Web Fact-Checking &bull; File Workspace &bull; Code Execution &bull; SQLite Memory
+              Capabilities: Real-time Transcript Q&A &bull; Web Fact Verification &bull; Past Meeting Memory
             </p>
           </div>
         </div>
