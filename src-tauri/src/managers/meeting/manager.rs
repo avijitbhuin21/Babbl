@@ -496,6 +496,9 @@ impl MeetingManager {
             }
         }
 
+        // Drop meeting_audio immediately to free high-memory audio buffers (~700MB for 1hr calls)
+        drop(meeting_audio);
+
         log::info!("Meeting transcript produced: {} segments. Generating Minutes of Meeting (MOM)...", transcript.segments.len());
         let mom = MomGenerator::generate(&transcript, &settings).await.ok();
 

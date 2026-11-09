@@ -621,6 +621,30 @@
         "clearedWelcome": "Chat history cleared. How can I assist you with your meeting?",
         "errorTitle": "Error communicating with assistant:"
       }
+    },
+    "history": {
+      "title": "Cross-Meeting Memory & History",
+      "sqliteTag": "SQLite indexed",
+      "description": "Every meeting, decision, MOM, and participant list is preserved and queryable by both you and the AI Copilot.",
+      "searchPlaceholder": "Search past decisions, attendees, topics...",
+      "searchButton": "Search",
+      "emptyTitle": "No Past Meetings Recorded",
+      "emptySearchTitle": "No matching meetings found",
+      "emptyDesc": "When you end a meeting recording, the full transcript, AI summary, and decisions will automatically appear here.",
+      "emptySearchDesc": "No meetings found matching \"{{query}}\". Try different keywords.",
+      "viewDetails": "View Details",
+      "downloadPdf": "PDF",
+      "askCopilot": "Ask Copilot",
+      "momTitle": "Minutes of Meeting (MOM)",
+      "copyMom": "Copy MOM",
+      "copied": "Copied",
+      "transcriptTitle": "Full Meeting Transcript",
+      "copyTranscript": "Copy Transcript",
+      "downloadPdfFull": "Download Styled PDF",
+      "askCopilotThis": "Ask Copilot About This Meeting",
+      "close": "Close",
+      "pdfSuccess": "Downloaded PDF for \"{{title}}\"",
+      "copiedToast": "Copied to clipboard!"
     }
   }
 }
