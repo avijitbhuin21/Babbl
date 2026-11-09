@@ -43,12 +43,75 @@ pub fn get_live_meeting_transcript(app: AppHandle) -> Result<MeetingTranscript, 
     Ok(meeting_manager.get_live_transcript())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct MeetingEmailSettings {
+    pub sender_email: String,
+    pub has_password: bool,
+    pub default_recipients: Vec<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_meeting_email_settings(app: AppHandle) -> Result<MeetingEmailSettings, String> {
+    let settings = crate::settings::get_settings(&app);
+    Ok(MeetingEmailSettings {
+        sender_email: settings.meeting_sender_email,
+        has_password: !settings.meeting_app_password.is_empty(),
+        default_recipients: settings.meeting_default_recipients,
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_meeting_email_settings(
+    app: AppHandle,
+    sender_email: String,
+    app_password: Option<String>,
+    default_recipients: Vec<String>,
+) -> Result<(), String> {
+    let mut settings = crate::settings::get_settings(&app);
+    settings.meeting_sender_email = sender_email;
+    if let Some(pass) = app_password {
+        if !pass.is_empty() {
+            settings.meeting_app_password = pass;
+        }
+    }
+    settings.meeting_default_recipients = default_recipients;
+    crate::settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clear_meeting_email_credentials(app: AppHandle) -> Result<(), String> {
+    let mut settings = crate::settings::get_settings(&app);
+    settings.meeting_sender_email = String::new();
+    settings.meeting_app_password = String::new();
+    settings.meeting_default_recipients = Vec::new();
+    crate::settings::write_settings(&app, settings);
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn send_meeting_mom_email(
-    _app: AppHandle,
-    request: crate::managers::meeting::email::SendMomEmailRequest,
+    app: AppHandle,
+    mut request: crate::managers::meeting::email::SendMomEmailRequest,
 ) -> Result<(), String> {
+    if request.app_password.trim().is_empty() {
+        let settings = crate::settings::get_settings(&app);
+        if settings.meeting_app_password.is_empty() {
+            return Err("No Gmail App Password provided or saved in backend settings.".to_string());
+        }
+        request.app_password = settings.meeting_app_password;
+    }
+    if request.sender_email.trim().is_empty() {
+        let settings = crate::settings::get_settings(&app);
+        if settings.meeting_sender_email.is_empty() {
+            return Err("No sender email provided or saved in backend settings.".to_string());
+        }
+        request.sender_email = settings.meeting_sender_email;
+    }
     crate::managers::meeting::email::send_mom_email(request).await
 }
 

@@ -20,6 +20,8 @@ import {
   Download,
   Bot,
   Calendar,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -71,21 +73,60 @@ export const MeetingSettings: React.FC = () => {
     setActiveTab("copilot");
   };
 
-  // Email sending state
+  // Email sending state (PR B: Secure desktop backend settings storage)
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [senderEmail, setSenderEmail] = useState(
-    () => localStorage.getItem("babbl_gmail_sender") || ""
-  );
+  const [senderEmail, setSenderEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
+  const [hasSavedPassword, setHasSavedPassword] = useState(false);
+  const [rememberCredentials, setRememberCredentials] = useState(true);
   const [recipientsInput, setRecipientsInput] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // Load email settings from desktop application backend
+  const loadEmailSettings = async () => {
+    try {
+      const res = await commands.getMeetingEmailSettings();
+      if (res?.status === "ok") {
+        if (res.data.sender_email) {
+          setSenderEmail(res.data.sender_email);
+        }
+        setHasSavedPassword(res.data.has_password);
+        if (res.data.default_recipients?.length > 0) {
+          setRecipientsInput(res.data.default_recipients.join(", "));
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load email settings from backend:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadEmailSettings();
+  }, []);
 
   useEffect(() => {
     if (lastResult?.mom?.title) {
       setEmailSubject(lastResult.mom.title);
     }
   }, [lastResult]);
+
+  const handleClearCredentials = async () => {
+    try {
+      const res = await commands.clearMeetingEmailCredentials();
+      if (res?.status === "ok") {
+        setHasSavedPassword(false);
+        setAppPassword("");
+        setSenderEmail("");
+        setRecipientsInput("");
+        toast.success(t("meeting.emailModal.clearedSuccess", "Saved email credentials removed."));
+      } else {
+        toast.error(`Failed to clear credentials: ${res?.error}`);
+      }
+    } catch (e: any) {
+      toast.error(`Failed to clear credentials: ${e?.message || e}`);
+    }
+  };
 
   const handleSendEmail = async () => {
     const cleanSender = senderEmail.trim();
@@ -99,7 +140,7 @@ export const MeetingSettings: React.FC = () => {
       toast.error(t("meeting.emailModal.senderRequired", "Please enter your Gmail address."));
       return;
     }
-    if (!cleanPass) {
+    if (!cleanPass && !hasSavedPassword) {
       toast.error(t("meeting.emailModal.passwordRequired", "Please enter your 16-character Gmail App Password."));
       return;
     }
@@ -108,8 +149,19 @@ export const MeetingSettings: React.FC = () => {
       return;
     }
 
-    // Save sender email in localStorage (password kept in session memory only)
-    localStorage.setItem("babbl_gmail_sender", cleanSender);
+    // Persist securely to desktop settings store if enabled
+    if (rememberCredentials) {
+      try {
+        await commands.saveMeetingEmailSettings(
+          cleanSender,
+          cleanPass.length > 0 ? cleanPass : null,
+          recipientList
+        );
+        setHasSavedPassword(true);
+      } catch (e) {
+        console.warn("Could not save meeting email settings:", e);
+      }
+    }
 
     setIsSendingEmail(true);
     toast.info(t("meeting.emailModal.sendingToast", "Sending MOM with transcript PDF..."));
@@ -130,7 +182,7 @@ export const MeetingSettings: React.FC = () => {
 
       const res = await commands.sendMeetingMomEmail({
         sender_email: cleanSender,
-        app_password: cleanPass,
+        app_password: cleanPass, // If blank, backend automatically retrieves saved password from backend settings
         recipients: recipientList,
         subject: emailSubject || t("meeting.emailModal.defaultSubject", "Minutes of Meeting"),
         mom_markdown: lastResult?.mom?.summary_markdown || "",
@@ -886,7 +938,13 @@ export const MeetingSettings: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-medium text-text/80 flex items-center gap-1.5">
                     <Key size={13} className="text-text/40" />
-                    {t("meeting.emailModal.passwordLabel", "Gmail App Password")}
+                    <span>{t("meeting.emailModal.passwordLabel", "Gmail App Password")}</span>
+                    {hasSavedPassword && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20 font-normal">
+                        <ShieldCheck size={11} />
+                        {t("meeting.emailModal.savedBadge", "Saved in desktop settings")}
+                      </span>
+                    )}
                   </label>
                   <span className="text-[10px] text-text/40">
                     {t("meeting.emailModal.passwordHint", "16-character Google App Password")}
@@ -896,7 +954,14 @@ export const MeetingSettings: React.FC = () => {
                   type="password"
                   value={appPassword}
                   onChange={(e) => setAppPassword(e.target.value)}
-                  placeholder="abcd efgh ijkl mnop"
+                  placeholder={
+                    hasSavedPassword
+                      ? t(
+                          "meeting.emailModal.passwordSavedPlaceholder",
+                          "•••••••••••••••• (Saved in desktop settings)"
+                        )
+                      : "abcd efgh ijkl mnop"
+                  }
                   className="w-full bg-mid-gray/10 border border-border/40 rounded-lg px-3 py-2 text-text/90 placeholder-text/30 focus:outline-none focus:border-background-ui text-xs font-mono"
                 />
                 <p className="text-[10px] text-text/40 mt-1">
@@ -962,6 +1027,42 @@ export const MeetingSettings: React.FC = () => {
                     <span>{t("meeting.emailModal.preview", "Preview")}</span>
                   </Button>
                 )}
+              </div>
+
+              {/* Credential Persistence & Management */}
+              <div className="bg-surface/30 border border-border/25 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-text/80 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberCredentials}
+                      onChange={(e) => setRememberCredentials(e.target.checked)}
+                      className="rounded border-border/40 text-background-ui focus:ring-background-ui/30 bg-mid-gray/20 h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <span className="font-medium text-text/90">
+                      {t(
+                        "meeting.emailModal.rememberCredentials",
+                        "Save credentials securely in desktop settings"
+                      )}
+                    </span>
+                  </label>
+                  {hasSavedPassword && (
+                    <button
+                      type="button"
+                      onClick={handleClearCredentials}
+                      className="text-[11px] text-red-400/80 hover:text-red-400 flex items-center gap-1 hover:underline cursor-pointer transition"
+                    >
+                      <Trash2 size={11} />
+                      <span>{t("meeting.emailModal.clearCredentials", "Clear saved credentials")}</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-text/40">
+                  {t(
+                    "meeting.emailModal.rememberCredentialsDesc",
+                    "Stores your sender address and password in backend settings so you don't have to re-type them."
+                  )}
+                </p>
               </div>
             </div>
 

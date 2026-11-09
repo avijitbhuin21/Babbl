@@ -65,11 +65,39 @@ if (typeof window !== "undefined") {
       clipboard_handling: "dont_modify",
     };
 
+    let mockMeetingEmail = {
+      sender_email: "",
+      has_password: false,
+      default_recipients: [] as string[],
+    };
+
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args: any) => {
         console.log("[Browser Dev Mode] Mock invoke:", cmd, args);
         if (cmd === "get_settings" || cmd === "get_default_settings") {
           return defaultSettings;
+        }
+        if (cmd === "get_meeting_email_settings") {
+          return mockMeetingEmail;
+        }
+        if (cmd === "save_meeting_email_settings") {
+          mockMeetingEmail = {
+            sender_email: args?.senderEmail || "",
+            has_password: Boolean(args?.appPassword),
+            default_recipients: args?.defaultRecipients || [],
+          };
+          return null;
+        }
+        if (cmd === "clear_meeting_email_credentials") {
+          mockMeetingEmail = {
+            sender_email: "",
+            has_password: false,
+            default_recipients: [],
+          };
+          return null;
+        }
+        if (cmd === "send_meeting_mom_email") {
+          return null;
         }
         if (cmd === "get_meeting_status") {
           return { is_recording: false, elapsed_secs: 0 };

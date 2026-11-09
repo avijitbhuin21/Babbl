@@ -998,6 +998,30 @@ async getPastMeetings(query?: string | null) : Promise<Result<PastMeetingRecord[
     else return { status: "error", error: e  as any };
 }
 },
+async getMeetingEmailSettings() : Promise<Result<MeetingEmailSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_meeting_email_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveMeetingEmailSettings(senderEmail: string, appPassword: string | null, defaultRecipients: string[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_meeting_email_settings", { senderEmail, appPassword, defaultRecipients }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearMeetingEmailCredentials() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_meeting_email_credentials") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Checks if the Mac is a laptop by detecting battery presence
  * 
@@ -1063,6 +1087,7 @@ export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
 export type MeetingMom = { title: string; created_at: string; duration_secs: number; participants: string[]; summary_markdown: string; raw_transcript: string }
 export type MeetingResult = { transcript: MeetingTranscript; mom: MeetingMom | null }
 export type MeetingStatus = { is_recording: boolean; elapsed_secs: number }
+export type MeetingEmailSettings = { sender_email: string; has_password: boolean; default_recipients: string[] }
 export type SendMomEmailRequest = { sender_email: string; app_password: string; recipients: string[]; subject: string; mom_markdown: string; pdf_base64: string | null; pdf_filename: string | null }
 export type ChatMessage = { role: string; content: string }
 export type SearchResult = { title: string; snippet: string; url: string }
