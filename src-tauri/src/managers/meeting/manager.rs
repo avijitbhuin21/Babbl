@@ -115,6 +115,35 @@ impl MeetingManager {
             || t.starts_with("[laughter")
     }
 
+    /// Finds the best boundary (minimum audio energy / natural pause) to cut an audio buffer
+    fn find_best_cut_point(buf: &[f32], min_samples: usize, max_samples: usize) -> usize {
+        let upper = usize::min(buf.len(), max_samples);
+        if upper <= min_samples {
+            return upper;
+        }
+
+        // Search in the range [min_samples..upper] for a 100ms window (1600 samples) with minimum RMS energy
+        let window_size = 1600;
+        let mut min_energy = f32::MAX;
+        let mut best_cut = upper;
+
+        let start_search = min_samples;
+        let end_search = upper.saturating_sub(window_size);
+
+        let mut i = start_search;
+        while i <= end_search {
+            let window = &buf[i..i + window_size];
+            let energy: f32 = window.iter().map(|&x| x * x).sum();
+            if energy < min_energy {
+                min_energy = energy;
+                best_cut = i + (window_size / 2);
+            }
+            i += 800; // Step by 50ms
+        }
+
+        best_cut
+    }
+
     pub fn start_meeting(&self, config: DiarizationConfig) -> Result<(), String> {
         if self.is_recording() {
             return Err("A meeting recording is already active".to_string());
@@ -198,6 +227,9 @@ impl MeetingManager {
             let min_samples = 16000 * 4;
             let max_samples = 16000 * 6;
 
+            let mut mic_processed_samples: usize = 0;
+            let mut sys_processed_samples: usize = 0;
+
             loop {
                 // Sleep between checks (every 2.5s)
                 tokio::select! {
@@ -216,11 +248,11 @@ impl MeetingManager {
                 let mic_data: Option<(Vec<f32>, f32, f32)> = {
                     let mut buf = mic_buf_worker.lock().unwrap();
                     if buf.len() >= min_samples {
-                        let take_len = usize::min(buf.len(), max_samples);
-                        let samples: Vec<f32> = buf.drain(..take_len).collect();
-                        let end_secs = start_time_instant.elapsed().as_secs_f32();
-                        let dur = samples.len() as f32 / 16000.0;
-                        let start_secs = (end_secs - dur).max(0.0);
+                        let cut_len = Self::find_best_cut_point(&buf, min_samples, max_samples);
+                        let samples: Vec<f32> = buf.drain(..cut_len).collect();
+                        let start_secs = mic_processed_samples as f32 / 16000.0;
+                        mic_processed_samples += samples.len();
+                        let end_secs = mic_processed_samples as f32 / 16000.0;
                         Some((samples, start_secs, end_secs))
                     } else {
                         None
@@ -269,11 +301,11 @@ impl MeetingManager {
                 let sys_data: Option<(Vec<f32>, f32, f32)> = {
                     let mut buf = sys_buf_worker.lock().unwrap();
                     if buf.len() >= min_samples {
-                        let take_len = usize::min(buf.len(), max_samples);
-                        let samples: Vec<f32> = buf.drain(..take_len).collect();
-                        let end_secs = start_time_instant.elapsed().as_secs_f32();
-                        let dur = samples.len() as f32 / 16000.0;
-                        let start_secs = (end_secs - dur).max(0.0);
+                        let cut_len = Self::find_best_cut_point(&buf, min_samples, max_samples);
+                        let samples: Vec<f32> = buf.drain(..cut_len).collect();
+                        let start_secs = sys_processed_samples as f32 / 16000.0;
+                        sys_processed_samples += samples.len();
+                        let end_secs = sys_processed_samples as f32 / 16000.0;
                         Some((samples, start_secs, end_secs))
                     } else {
                         None

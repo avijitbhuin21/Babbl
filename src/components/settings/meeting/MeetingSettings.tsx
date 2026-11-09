@@ -75,9 +75,7 @@ export const MeetingSettings: React.FC = () => {
   const [senderEmail, setSenderEmail] = useState(
     () => localStorage.getItem("babbl_gmail_sender") || ""
   );
-  const [appPassword, setAppPassword] = useState(
-    () => localStorage.getItem("babbl_gmail_password") || ""
-  );
+  const [appPassword, setAppPassword] = useState("");
   const [recipientsInput, setRecipientsInput] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
@@ -109,9 +107,8 @@ export const MeetingSettings: React.FC = () => {
       return;
     }
 
-    // Save sender & password in localStorage for convenience
+    // Save sender email in localStorage (password is kept in session memory only for security)
     localStorage.setItem("babbl_gmail_sender", cleanSender);
-    localStorage.setItem("babbl_gmail_password", cleanPass);
 
     setIsSendingEmail(true);
     toast.info(`Sending MOM with transcript PDF to ${recipientList.length} recipient(s)...`);
@@ -363,7 +360,10 @@ export const MeetingSettings: React.FC = () => {
             )}
           </div>
           <p className="text-sm text-neutral-400 mt-1">
-            Simultaneously records your microphone & attendee system audio with speaker diarization, English transcription, and automatic Minutes of Meeting.
+            Dual-track recording captures your microphone (&quot;You&quot;) and conference audio (&quot;Attendee&quot;) with live transcription and automatic Minutes of Meeting.
+          </p>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Tip: Wear headphones during meetings to prevent remote attendee speech from echoing back into your microphone.
           </p>
         </div>
 
