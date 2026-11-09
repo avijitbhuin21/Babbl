@@ -1,13 +1,9 @@
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_opener::OpenerExt;
 
 use crate::managers::history::{HistoryManager, PastMeetingRecord};
 use crate::managers::meeting::{
-    assistant::{
-        AssistantQueryRequest, AssistantResponse, CodeExecutionResult,
-        MeetingAssistantAgent, WorkspaceFileEntry, WorkspaceManager,
-    },
+    assistant::{AssistantQueryRequest, AssistantResponse, MeetingAssistantAgent},
     types::{DiarizationConfig, MeetingResult, MeetingStatus, MeetingTranscript},
     MeetingManager,
 };
@@ -67,45 +63,6 @@ pub async fn ask_meeting_assistant(
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_workspace_files(
-    app: AppHandle,
-    subpath: Option<String>,
-) -> Result<Vec<WorkspaceFileEntry>, String> {
-    let ws = WorkspaceManager::get_workspace_dir(&app);
-    WorkspaceManager::list_files(&ws, subpath.as_deref())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn read_workspace_file(app: AppHandle, path: String) -> Result<String, String> {
-    let ws = WorkspaceManager::get_workspace_dir(&app);
-    WorkspaceManager::read_file(&ws, &path)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn write_workspace_file(
-    app: AppHandle,
-    path: String,
-    content: String,
-) -> Result<(), String> {
-    let ws = WorkspaceManager::get_workspace_dir(&app);
-    WorkspaceManager::write_file(&ws, &path, &content)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn execute_workspace_code(
-    app: AppHandle,
-    language: String,
-    code: String,
-) -> Result<CodeExecutionResult, String> {
-    let ws = WorkspaceManager::get_workspace_dir(&app);
-    WorkspaceManager::execute_code(&ws, &language, &code).await
-}
-
-#[tauri::command]
-#[specta::specta]
 pub fn get_past_meetings(
     app: AppHandle,
     query: Option<String>,
@@ -116,15 +73,5 @@ pub fn get_past_meetings(
     history_mgr
         .get_past_meetings(query.as_deref())
         .map_err(|e| format!("Failed to retrieve meetings: {}", e))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn open_workspace_folder(app: AppHandle) -> Result<(), String> {
-    let ws = WorkspaceManager::get_workspace_dir(&app);
-    let path_str = ws.to_string_lossy().to_string();
-    app.opener()
-        .open_path(path_str, None::<String>)
-        .map_err(|e| format!("Failed to open workspace folder: {}", e))
 }
 

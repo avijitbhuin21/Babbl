@@ -363,9 +363,19 @@ impl MeetingManager {
         );
 
         log::info!("Stopping meeting recording and gathering audio streams...");
-        let meeting_audio = recorder
-            .stop()
-            .map_err(|e| format!("Error stopping recorder: {}", e))?;
+        let meeting_audio = match recorder.stop() {
+            Ok(audio) => audio,
+            Err(e) => {
+                let _ = self.app_handle.emit(
+                    "babbl://meeting_state",
+                    serde_json::json!({
+                        "is_recording": false,
+                        "is_processing": false,
+                    }),
+                );
+                return Err(format!("Error stopping recorder: {}", e));
+            }
+        };
         let _ = recorder.close();
 
         let config = self.current_config.lock().unwrap().clone();
@@ -486,22 +496,6 @@ impl MeetingManager {
             ) {
                 log::warn!("Failed to save meeting to history database: {}", e);
             }
-
-            // Also write markdown file to assistant workspace
-            let ws_dir = crate::managers::meeting::assistant::WorkspaceManager::get_workspace_dir(&self.app_handle);
-            let timestamp = chrono::Utc::now().timestamp();
-            let clean_title = title.replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
-            let filename = format!("meetings/Meeting_{}_{}.md", timestamp, clean_title);
-            let md_content = format!(
-                "# Meeting: {}\n\nDate: {}\nDuration: {:.1}s\nParticipants: {}\n\n## Minutes of Meeting\n{}\n\n## Full Transcript\n{}\n",
-                title,
-                chrono::Utc::now().to_rfc3339(),
-                result.transcript.duration_secs,
-                participants.join(", "),
-                summary_markdown,
-                full_transcript
-            );
-            let _ = crate::managers::meeting::assistant::WorkspaceManager::write_file(&ws_dir, &filename, &md_content);
         }
 
         let _ = self.app_handle.emit("babbl://meeting_finished", &result);
@@ -520,25 +514,69 @@ impl MeetingManager {
         transcript: &mut MeetingTranscript,
         settings: &crate::settings::AppSettings,
     ) {
-        // Collect groq or other api key if configured
-        let groq_key = settings
-            .post_process_api_keys
-            .get("groq")
-            .cloned()
-            .or_else(|| settings.online_provider_api_keys.get("groq").cloned())
-            .unwrap_or_default();
-
-        if groq_key.trim().is_empty() {
-            return;
+        // Find configured provider
+        let mut candidates = Vec::new();
+        if let Some(p) = settings.active_post_process_provider() {
+            candidates.push(p.clone());
+        }
+        if let Some(p) = settings.post_process_providers.iter().find(|p| p.id == settings.online_provider_id) {
+            if !candidates.iter().any(|c| c.id == p.id) {
+                candidates.push(p.clone());
+            }
+        }
+        for p in &settings.post_process_providers {
+            if !candidates.iter().any(|c| c.id == p.id) {
+                candidates.push(p.clone());
+            }
         }
 
+        let mut active_cred: Option<(String, String, String)> = None;
+        for provider in candidates {
+            let mut api_key = settings.post_process_api_keys.get(&provider.id).cloned().unwrap_or_default();
+            if api_key.trim().is_empty() {
+                if let Some(alt) = settings.online_provider_api_keys.get(&provider.id) {
+                    api_key = alt.clone();
+                }
+            }
+            if api_key.trim().is_empty() {
+                if provider.id == "groq" {
+                    api_key = std::env::var("GROQ_API_KEY").unwrap_or_default();
+                } else if provider.id == "openai" {
+                    api_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+                }
+            }
+            if !api_key.trim().is_empty() {
+                let mut model = settings.post_process_models.get(&provider.id).cloned().unwrap_or_default();
+                if model.trim().is_empty() {
+                    model = match provider.id.as_str() {
+                        "groq" => "openai/gpt-oss-120b".to_string(),
+                        "openai" => "gpt-4o-mini".to_string(),
+                        _ => "llama-3.1-8b-instant".to_string(),
+                    };
+                }
+                let base_url = if provider.base_url.trim().is_empty() {
+                    "https://api.groq.com/openai/v1".to_string()
+                } else {
+                    provider.base_url.clone()
+                };
+                active_cred = Some((base_url, model, api_key));
+                break;
+            }
+        }
+
+        let (base_url, model, api_key) = match active_cred {
+            Some(cred) => cred,
+            None => return,
+        };
+
+        let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
         let client = reqwest::Client::new();
         for seg in &mut transcript.segments {
             // Check if text has non-ASCII characters indicating foreign language
             let has_non_ascii = seg.text.chars().any(|c| !c.is_ascii());
             if has_non_ascii && !seg.text.trim().is_empty() {
                 let body = serde_json::json!({
-                    "model": "openai/gpt-oss-120b",
+                    "model": model,
                     "messages": [
                         {
                             "role": "system",
@@ -553,8 +591,8 @@ impl MeetingManager {
                 });
 
                 if let Ok(resp) = client
-                    .post("https://api.groq.com/openai/v1/chat/completions")
-                    .header("Authorization", format!("Bearer {}", groq_key))
+                    .post(&endpoint)
+                    .header("Authorization", format!("Bearer {}", api_key))
                     .header("Content-Type", "application/json")
                     .json(&body)
                     .send()

@@ -54,7 +54,7 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
       id: "welcome-1",
       role: "assistant",
       content:
-        "Hello! I am your **Live Meeting Assistant & Autonomous Workspace Agent**.\n\nHere is what I can do for you:\n- **Live Q&A & Copilot**: Ask me any question about what has been spoken in your meeting.\n- **Autonomous Workspace**: I have dedicated access to `assistant_workspace/` to create files, write notes, and run Python, Node.js, and PowerShell scripts.\n- **Cross-Meeting Memory**: I remember past meetings, decisions, and action items stored in your local SQLite database.\n- **Live Fact Verification**: Ask me to verify statements, and I will search the web and provide direct citation links.",
+        "Hello! I am your **Meeting Intelligence Assistant**.\n\nHere is how I can help:\n- **Live Q&A & Copilot**: Ask me questions about what participants or you have spoken in the current call.\n- **Past Meeting Memory**: Search past decisions, attendees, and topics saved in your local SQLite history.\n- **Real-Time Fact Verification**: Ask me to verify claims or regulations, and I will search the web and provide direct markdown citation links.\n- **Action Items & Summaries**: Extract key takeaways, deadlines, and follow-ups instantly.",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -179,7 +179,7 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
       {
         id: "welcome-1",
         role: "assistant",
-        content: "Chat history cleared. How can I assist you with your meeting or workspace?",
+        content: "Chat history cleared. How can I assist you with your meeting?",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
@@ -204,14 +204,14 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
       prompt: "Can you search past meetings in the database and list what decisions or action items were agreed upon previously?",
     },
     {
-      label: "Run Python code in workspace",
-      icon: <Terminal className="w-3 h-3 text-amber-400" />,
-      prompt: "Please write and execute a Python script in assistant_workspace/ to summarize meeting metrics or calculate duration, and show me the output.",
+      label: "Extract action items & next steps",
+      icon: <CheckCircle2 className="w-3 h-3 text-amber-400" />,
+      prompt: "Extract all action items, assignees, and next steps mentioned in this meeting.",
     },
     {
-      label: "Save action items to file",
+      label: "What questions remain unanswered?",
       icon: <FileText className="w-3 h-3 text-purple-400" />,
-      prompt: "Extract all action items, owners, and next steps from this meeting, and save them to a file named 'action_items.md' in the workspace.",
+      prompt: "Review the discussion and list any open questions or concerns that were raised but not yet answered.",
     },
   ];
 
@@ -227,17 +227,6 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
         </span>
       );
     }
-    if (tool.includes("execute_code")) {
-      return (
-        <span
-          key={tool}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-        >
-          <Terminal className="w-2.5 h-2.5" />
-          Code Executed
-        </span>
-      );
-    }
     if (tool.includes("past_meetings")) {
       return (
         <span
@@ -249,14 +238,14 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
         </span>
       );
     }
-    if (tool.includes("write_file") || tool.includes("read_file") || tool.includes("list_files")) {
+    if (tool.includes("live_meeting") || tool.includes("transcript")) {
       return (
         <span
           key={tool}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
         >
-          <Folder className="w-2.5 h-2.5" />
-          Workspace File I/O
+          <FileText className="w-2.5 h-2.5" />
+          Live Transcript
         </span>
       );
     }
@@ -268,6 +257,7 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
         {tool}
       </span>
     );
+  };
   };
 
   const activeTranscript = getActiveTranscriptText();
@@ -453,7 +443,7 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
             onChange={(e) => setInputQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="Ask anything about the meeting, execute code, verify facts with links, or manage files..."
+            placeholder="Ask anything about this meeting, search past decisions, or verify facts..."
             className="flex-1 bg-transparent text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none resize-none leading-relaxed py-1 px-1 max-h-32"
           />
 
@@ -475,7 +465,7 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
         </div>
         <div className="flex items-center justify-between text-[10px] text-neutral-500 mt-1.5 px-1 font-mono">
           <span>Press Enter to send, Shift+Enter for new line</span>
-          <span>Workspace root: assistant_workspace/</span>
+          <span>Privacy: Audio stays local; questions use configured Refine model</span>
         </div>
       </div>
     </div>

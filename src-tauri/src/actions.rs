@@ -574,8 +574,8 @@ pub fn get_online_transcription_provider(settings: &AppSettings) -> Option<Onlin
     })
 }
 
-/// Unified transcription helper that respects user settings (online provider vs local model)
-/// with automatic fallback to online provider if local model is not loaded.
+/// Unified transcription helper that respects user settings (online provider vs local model).
+/// When local transcription is configured, audio strictly stays on device and is never sent to the cloud.
 pub async fn transcribe_audio(
     app_handle: &AppHandle,
     samples: Vec<f32>,
@@ -594,20 +594,22 @@ pub async fn transcribe_audio(
             Err("Online provider is not configured. Please add an API key under Online Providers in Settings.".to_string())
         }
     } else {
-        let tm = app_handle.state::<Arc<TranscriptionManager>>();
+        let tm = app_handle.state::<Arc<TranscriptionManager>>().inner().clone();
         if !tm.is_model_loaded() {
-            // Automatic fallback: if local model is not loaded, check if an online provider is configured!
-            if let Some(provider) = get_online_transcription_provider(&settings) {
-                log::info!("Local model not loaded in RAM; falling back to online provider '{}' for meeting audio", provider.provider_id);
-                let language = if settings.selected_language == "auto" {
-                    None
-                } else {
-                    Some(settings.selected_language.clone())
-                };
-                return transcribe_online(provider, samples, language, translate_to_english).await;
+            // Attempt to load the selected model if not loaded yet
+            if let Err(e) = tm.load_model() {
+                return Err(format!(
+                    "Local transcription model is not loaded ({}). Please check your selected model in Settings.",
+                    e
+                ));
             }
         }
-        tm.transcribe(samples).map_err(|e| format!("Local transcription failed: {}", e))
+        tokio::task::spawn_blocking(move || {
+            tm.transcribe(samples)
+                .map_err(|e| format!("Local transcription failed: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Transcription task panicked: {}", e))?
     }
 }
 

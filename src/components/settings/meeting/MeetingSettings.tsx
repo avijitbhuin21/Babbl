@@ -20,7 +20,6 @@ import {
   AtSign,
   Download,
   Bot,
-  Folder,
   Calendar,
 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
@@ -39,7 +38,6 @@ import {
   exportMeetingPdfBase64,
 } from "@/lib/pdfGenerator";
 import { MeetingAssistantPanel } from "./MeetingAssistantPanel";
-import { WorkspaceManagerView } from "./WorkspaceManagerView";
 import { PastMeetingsView } from "./PastMeetingsView";
 
 export const MeetingSettings: React.FC = () => {
@@ -63,8 +61,8 @@ export const MeetingSettings: React.FC = () => {
   const [copiedTranscript, setCopiedTranscript] = useState(false);
   const [copiedMom, setCopiedMom] = useState(false);
 
-  // Subtabs (Live Meeting, AI Copilot, Workspace, Past Meetings)
-  const [activeTab, setActiveTab] = useState<"meeting" | "copilot" | "workspace" | "history">("meeting");
+  // Subtabs (Live Meeting, AI Copilot, Past Meetings)
+  const [activeTab, setActiveTab] = useState<"meeting" | "copilot" | "history">("meeting");
   const [selectedPastMeetingForCopilot, setSelectedPastMeetingForCopilot] = useState<PastMeetingRecord | null>(null);
 
   const handleAskCopilotAboutMeeting = (meeting: PastMeetingRecord) => {
@@ -426,19 +424,6 @@ export const MeetingSettings: React.FC = () => {
           ) : lastResult ? (
             <span className="w-2 h-2 rounded-full bg-emerald-400" title="Transcript loaded in context" />
           ) : null}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("workspace")}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
-            activeTab === "workspace"
-              ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60"
-          }`}
-        >
-          <Folder className="w-3.5 h-3.5 text-amber-400" />
-          <span>Workspace & Code</span>
         </button>
 
         <button
@@ -813,12 +798,7 @@ export const MeetingSettings: React.FC = () => {
         />
       )}
 
-      {/* Tab 3: Autonomous Workspace & Code Runner */}
-      {activeTab === "workspace" && (
-        <WorkspaceManagerView />
-      )}
-
-      {/* Tab 4: Past Meetings SQLite Memory */}
+      {/* Tab 3: Past Meetings SQLite Memory */}
       {activeTab === "history" && (
         <PastMeetingsView
           onAskCopilotAboutMeeting={handleAskCopilotAboutMeeting}

@@ -1,39 +1,16 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tokio::process::Command;
 
 use crate::managers::history::HistoryManager;
 use crate::settings::get_settings;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct ChatMessage {
-    pub role: String, // "user", "assistant", "system"
+    pub role: String, // "user", "assistant", "system", "tool"
     pub content: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-pub struct WorkspaceFileEntry {
-    pub name: String,
-    pub relative_path: String,
-    pub is_dir: bool,
-    pub size_bytes: u64,
-    pub modified_at: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-pub struct CodeExecutionResult {
-    pub language: String,
-    pub stdout: String,
-    pub stderr: String,
-    pub exit_code: i32,
-    pub success: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -54,215 +31,12 @@ pub struct AssistantQueryRequest {
 pub struct AssistantResponse {
     pub reply: String,
     pub tools_used: Vec<String>,
-    pub workspace_files: Vec<WorkspaceFileEntry>,
-}
-
-pub struct WorkspaceManager;
-
-impl WorkspaceManager {
-    /// Resolves the dedicated assistant workspace directory.
-    /// Prefers a workspace folder in the project/working directory, falling back to app_data_dir.
-    pub fn get_workspace_dir(app_handle: &AppHandle) -> PathBuf {
-        let preferred = PathBuf::from("assistant_workspace");
-        if preferred.exists() || fs::create_dir_all(&preferred).is_ok() {
-            if let Ok(abs) = fs::canonicalize(&preferred) {
-                return abs;
-            }
-            return preferred;
-        }
-
-        // Fallback to app_data_dir
-        let fallback = app_handle
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("assistant_workspace");
-        let _ = fs::create_dir_all(&fallback);
-        fallback
-    }
-
-    /// Recursively lists files in the workspace or a specified subpath.
-    pub fn list_files(
-        workspace: &Path,
-        subpath: Option<&str>,
-    ) -> Result<Vec<WorkspaceFileEntry>, String> {
-        let target_dir = match subpath {
-            Some(sub) if !sub.trim().is_empty() => {
-                let p = workspace.join(sub.trim_start_matches(['/', '\\']));
-                if !p.starts_with(workspace) {
-                    return Err("Access denied: path escapes workspace".to_string());
-                }
-                p
-            }
-            _ => workspace.to_path_buf(),
-        };
-
-        if !target_dir.exists() {
-            let _ = fs::create_dir_all(&target_dir);
-        }
-
-        let mut entries = Vec::new();
-        Self::collect_entries(workspace, &target_dir, &mut entries)?;
-        entries.sort_by(|a, b| {
-            if a.is_dir == b.is_dir {
-                a.name.cmp(&b.name)
-            } else if a.is_dir {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Greater
-            }
-        });
-
-        Ok(entries)
-    }
-
-    fn collect_entries(
-        root: &Path,
-        current: &Path,
-        out: &mut Vec<WorkspaceFileEntry>,
-    ) -> Result<(), String> {
-        let read_dir = fs::read_dir(current).map_err(|e| format!("Failed to read directory: {}", e))?;
-        for entry in read_dir.flatten() {
-            let path = entry.path();
-            let is_dir = path.is_dir();
-            let metadata = entry.metadata().ok();
-            let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
-            let modified_at = metadata
-                .and_then(|m| m.modified().ok())
-                .map(|t| {
-                    let dt: DateTime<Utc> = t.into();
-                    dt.format("%Y-%m-%d %H:%M:%S").to_string()
-                })
-                .unwrap_or_else(|| "Unknown".to_string());
-
-            let name = entry.file_name().to_string_lossy().to_string();
-            let relative_path = path
-                .strip_prefix(root)
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_else(|_| name.clone());
-
-            out.push(WorkspaceFileEntry {
-                name,
-                relative_path,
-                is_dir,
-                size_bytes,
-                modified_at,
-            });
-
-            if is_dir {
-                let _ = Self::collect_entries(root, &path, out);
-            }
-        }
-        Ok(())
-    }
-
-    /// Reads content of a workspace file.
-    pub fn read_file(workspace: &Path, relative_path: &str) -> Result<String, String> {
-        let clean = relative_path.trim().trim_start_matches(['/', '\\']);
-        let full_path = workspace.join(clean);
-
-        if !full_path.starts_with(workspace) {
-            return Err("Access denied: path escapes workspace".to_string());
-        }
-
-        if !full_path.exists() {
-            return Err(format!("File '{}' not found in workspace", clean));
-        }
-
-        fs::read_to_string(&full_path).map_err(|e| format!("Failed to read file: {}", e))
-    }
-
-    /// Writes or creates a file in the workspace.
-    pub fn write_file(
-        workspace: &Path,
-        relative_path: &str,
-        content: &str,
-    ) -> Result<(), String> {
-        let clean = relative_path.trim().trim_start_matches(['/', '\\']);
-        let full_path = workspace.join(clean);
-
-        if !full_path.starts_with(workspace) {
-            return Err("Access denied: path escapes workspace".to_string());
-        }
-
-        if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create parent directory: {}", e))?;
-        }
-
-        fs::write(&full_path, content).map_err(|e| format!("Failed to write file: {}", e))?;
-        log::info!("Workspace file written: {:?}", full_path);
-        Ok(())
-    }
-
-    /// Runs code (Python, JavaScript/Node, or PowerShell) inside the workspace folder.
-    pub async fn execute_code(
-        workspace: &Path,
-        language: &str,
-        code: &str,
-    ) -> Result<CodeExecutionResult, String> {
-        let lang = language.to_lowercase().trim().to_string();
-        log::info!("Executing workspace code [{}]: {} chars", lang, code.len());
-
-        let mut child_cmd = match lang.as_str() {
-            "python" | "py" => {
-                let mut cmd = Command::new("python");
-                cmd.arg("-c").arg(code);
-                cmd
-            }
-            "javascript" | "js" | "node" => {
-                let mut cmd = Command::new("node");
-                cmd.arg("-e").arg(code);
-                cmd
-            }
-            "powershell" | "ps1" | "shell" => {
-                let mut cmd = Command::new("powershell");
-                cmd.arg("-NoProfile").arg("-Command").arg(code);
-                cmd
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported execution language '{}'. Supported: python, node, powershell",
-                    lang
-                ));
-            }
-        };
-
-        child_cmd.current_dir(workspace);
-        child_cmd.stdout(Stdio::piped());
-        child_cmd.stderr(Stdio::piped());
-
-        let child = child_cmd
-            .spawn()
-            .map_err(|e| format!("Failed to spawn {} process: {}", lang, e))?;
-
-        // 25s timeout
-        let output = match tokio::time::timeout(Duration::from_secs(25), child.wait_with_output()).await {
-            Ok(res) => res.map_err(|e| format!("Execution failed: {}", e))?,
-            Err(_) => {
-                return Err("Code execution timed out after 25 seconds".to_string());
-            }
-        };
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let exit_code = output.status.code().unwrap_or(-1);
-        let success = output.status.success();
-
-        Ok(CodeExecutionResult {
-            language: lang,
-            stdout,
-            stderr,
-            exit_code,
-            success,
-        })
-    }
 }
 
 pub struct WebSearcher;
 
 impl WebSearcher {
-    /// Queries public search APIs (DuckDuckGo + Wikipedia) for real-time verification and citation links.
+    /// Performs a non-blocking web search query using public search APIs (DuckDuckGo & Wikipedia).
     pub async fn search(query: &str) -> Result<Vec<SearchResult>, String> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
@@ -294,7 +68,6 @@ impl WebSearcher {
                     });
                 }
 
-                // Check RelatedTopics
                 if let Some(topics) = json["RelatedTopics"].as_array() {
                     for topic in topics.iter().take(3) {
                         if let (Some(text), Some(first_url)) = (topic["Text"].as_str(), topic["FirstURL"].as_str()) {
@@ -365,93 +138,20 @@ impl WebSearcher {
 pub struct MeetingAssistantAgent;
 
 impl MeetingAssistantAgent {
-    /// Dispatches an intelligent query to the Groq LLM with autonomous tool execution.
+    /// Ask a question to the Meeting Assistant with read-only tools (past meetings, live transcript, web search).
     pub async fn ask(
         app_handle: &AppHandle,
         request: AssistantQueryRequest,
     ) -> Result<AssistantResponse, String> {
         let settings = get_settings(app_handle);
-        let workspace = WorkspaceManager::get_workspace_dir(app_handle);
 
-        let groq_key = settings
-            .post_process_api_keys
-            .get("groq")
-            .cloned()
-            .or_else(|| settings.online_provider_api_keys.get("groq").cloned())
-            .or_else(|| std::env::var("GROQ_API_KEY").ok())
-            .unwrap_or_default();
-
-        if groq_key.trim().is_empty() {
-            return Err("Groq API key not configured. Please add your Groq API key in Cloud Models settings.".to_string());
-        }
-
-        let model = settings
-            .post_process_models
-            .get("groq")
-            .cloned()
-            .unwrap_or_else(|| "openai/gpt-oss-120b".to_string());
+        // Resolve active LLM provider, base URL, model name, and API key
+        let (base_url, model, api_key) = Self::resolve_llm_credentials(&settings)?;
 
         let history_manager = app_handle.try_state::<Arc<HistoryManager>>();
 
-        // Available tools specification for Groq LLM
+        // Available read-only tools
         let tools = serde_json::json!([
-            {
-                "type": "function",
-                "function": {
-                    "name": "workspace_write_file",
-                    "description": "Create or update a file or script inside the assistant's dedicated workspace directory",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": { "type": "string", "description": "Relative file path inside workspace (e.g. 'notes.md', 'scripts/verify.py')" },
-                            "content": { "type": "string", "description": "Full file content to write" }
-                        },
-                        "required": ["path", "content"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "workspace_read_file",
-                    "description": "Read content of a file inside the assistant's workspace directory",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": { "type": "string", "description": "Relative file path inside workspace" }
-                        },
-                        "required": ["path"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "workspace_list_files",
-                    "description": "List all files and subfolders created in the assistant workspace directory",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "subpath": { "type": "string", "description": "Optional subdirectory to list" }
-                        }
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "workspace_execute_code",
-                    "description": "Run Python, Node.js, or PowerShell code inside the workspace directory and get stdout/stderr results",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "language": { "type": "string", "enum": ["python", "node", "powershell"], "description": "Language runtime" },
-                            "code": { "type": "string", "description": "Code string to execute" }
-                        },
-                        "required": ["language", "code"]
-                    }
-                }
-            },
             {
                 "type": "function",
                 "function": {
@@ -495,22 +195,16 @@ impl MeetingAssistantAgent {
 
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
-        let system_prompt = format!(
-            "You are Babbl Live Meeting Assistant, an executive AI copilot embedded in Babbl desktop app.\n\
-            Workspace path: {}\n\n\
+        let system_prompt = "You are the Babbl Meeting Intelligence Assistant, an executive copilot embedded in Babbl.\n\
             CAPABILITIES:\n\
-            1. Current Meeting Awareness: You can read the live meeting transcript and answer questions about what is being discussed in real-time.\n\
-            2. Autonomous Workspace: You have your own dedicated folder. You can write files, read files, list files, and execute Python/Node/PowerShell code.\n\
-            3. Cross-Meeting Memory: You can search past meetings to tell the user when decisions were taken, who attended, and what was discussed.\n\
-            4. Live Web Verification: You can search the web to verify facts, compliance standards, or figures and provide direct markdown citation links.\n\n\
+            1. Current Meeting Awareness: You can access the live meeting transcript and answer questions about what participants or the user have said.\n\
+            2. Cross-Meeting Memory: You can search past meetings in the local SQLite database to retrieve past agreements, dates, attendees, and discussions.\n\
+            3. Live Web Verification: You can search the web to verify facts, regulations, standards, or claims and provide clickable Markdown citation links [Source](URL).\n\n\
             GUIDELINES:\n\
-            - When answering questions about past decisions, ALWAYS call `search_past_meetings`.\n\
-            - When asked to verify a fact, check a standard (e.g. ISO, DPDP, GDPR), or find links, ALWAYS call `web_search_verification` and embed the URLs [title](url) into your response.\n\
-            - When you call a tool and receive results, immediately synthesize the results into your final response for the user with verified citation links or confirmations. Do not call tools repeatedly in a loop.\n\
-            - When writing code, create files in the workspace with `workspace_write_file` and run them with `workspace_execute_code`.\n\
-            - Always be concise, highly professional, direct, and structure your responses with clean Markdown.\n",
-            workspace.display()
-        );
+            - When answering questions about past meetings or previous decisions, ALWAYS call `search_past_meetings`.\n\
+            - When asked to verify a fact, check a regulation/standard (e.g., ISO, GDPR, SOC2), or find links, ALWAYS call `web_search_verification` and embed citation links into your response.\n\
+            - When you receive tool outputs, immediately synthesize them into your final response for the user. Do not invoke tools in an infinite loop.\n\
+            - Always be concise, direct, helpful, and structure your responses with clean Markdown.";
 
         messages.push(serde_json::json!({
             "role": "system",
@@ -524,7 +218,7 @@ impl MeetingAssistantAgent {
                 let lt = meeting_mgr.get_live_transcript();
                 if !lt.full_text.trim().is_empty() {
                     ongoing_transcript = Some(format!(
-                        "CURRENT ONGOING MEETING TRANSCRIPT (Live call context, {:.1}s elapsed, {} spoken turns):\n{}",
+                        "CURRENT ONGOING MEETING TRANSCRIPT ({:.1}s elapsed, {} spoken turns):\n{}",
                         lt.duration_secs,
                         lt.segments.len(),
                         lt.full_text
@@ -537,7 +231,7 @@ impl MeetingAssistantAgent {
             if !current_tx.trim().is_empty() {
                 messages.push(serde_json::json!({
                     "role": "system",
-                    "content": format!("CURRENT ONGOING MEETING TRANSCRIPT:\n{}\n\n(Use this transcript to answer questions about what participants or you have said during this meeting)", current_tx.trim())
+                    "content": format!("CURRENT ONGOING MEETING TRANSCRIPT:\n{}\n\n(Use this transcript to answer questions about what participants or you have said)", current_tx.trim())
                 }));
             }
         }
@@ -556,12 +250,17 @@ impl MeetingAssistantAgent {
             "content": request.query
         }));
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         let mut tools_used = Vec::new();
         let max_rounds = 4;
         let mut final_content = String::new();
 
-        // Agent loop (multi-turn tool execution and synthesis)
+        let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+
+        // Agent loop (tool execution and synthesis)
         for _round in 0..max_rounds {
             let body = serde_json::json!({
                 "model": model,
@@ -572,17 +271,17 @@ impl MeetingAssistantAgent {
             });
 
             let resp = client
-                .post("https://api.groq.com/openai/v1/chat/completions")
-                .header("Authorization", format!("Bearer {}", groq_key))
+                .post(&endpoint)
+                .header("Authorization", format!("Bearer {}", api_key))
                 .header("Content-Type", "application/json")
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| format!("Groq API request error: {}", e))?;
+                .map_err(|e| format!("LLM API request error: {}", e))?;
 
             if !resp.status().is_success() {
                 let err_text = resp.text().await.unwrap_or_default();
-                return Err(format!("Groq API error: {}", err_text));
+                return Err(format!("LLM API error ({}): {}", endpoint, err_text));
             }
 
             let resp_json: serde_json::Value = resp
@@ -613,39 +312,6 @@ impl MeetingAssistantAgent {
                         tools_used.push(fn_name.to_string());
 
                         let tool_result_str: String = match fn_name {
-                            "workspace_write_file" => {
-                                let path = args["path"].as_str().unwrap_or("notes.txt");
-                                let file_content = args["content"].as_str().unwrap_or("");
-                                match WorkspaceManager::write_file(&workspace, path, file_content) {
-                                    Ok(_) => format!("Successfully wrote file '{}' ({} bytes). Confirm this to the user.", path, file_content.len()),
-                                    Err(e) => format!("Error writing file: {}", e),
-                                }
-                            }
-                            "workspace_read_file" => {
-                                let path = args["path"].as_str().unwrap_or("");
-                                match WorkspaceManager::read_file(&workspace, path) {
-                                    Ok(c) => c,
-                                    Err(e) => format!("Error reading file: {}", e),
-                                }
-                            }
-                            "workspace_list_files" => {
-                                let sub = args["subpath"].as_str();
-                                match WorkspaceManager::list_files(&workspace, sub) {
-                                    Ok(entries) => serde_json::to_string_pretty(&entries).unwrap_or_default(),
-                                    Err(e) => format!("Error listing files: {}", e),
-                                }
-                            }
-                            "workspace_execute_code" => {
-                                let lang = args["language"].as_str().unwrap_or("python");
-                                let code = args["code"].as_str().unwrap_or("");
-                                match WorkspaceManager::execute_code(&workspace, lang, code).await {
-                                    Ok(res) => format!(
-                                        "Exit code: {}\nSTDOUT:\n{}\nSTDERR:\n{}\nExecution complete. Summarize output for user.",
-                                        res.exit_code, res.stdout, res.stderr
-                                    ),
-                                    Err(e) => format!("Execution error: {}", e),
-                                }
-                            }
                             "search_past_meetings" => {
                                 let q = args["query"].as_str().unwrap_or("");
                                 if let Some(ref hm) = history_manager {
@@ -716,83 +382,99 @@ impl MeetingAssistantAgent {
 
             // If we have content and no pending tool calls, return final response!
             if !content.trim().is_empty() {
-                let current_files = WorkspaceManager::list_files(&workspace, None).unwrap_or_default();
                 return Ok(AssistantResponse {
                     reply: content,
                     tools_used,
-                    workspace_files: current_files,
                 });
             }
         }
 
-        // If loop finished and we collected content, return it
-        let current_files = WorkspaceManager::list_files(&workspace, None).unwrap_or_default();
         if !final_content.trim().is_empty() {
-            return Ok(AssistantResponse {
+            Ok(AssistantResponse {
                 reply: final_content,
                 tools_used,
-                workspace_files: current_files,
-            });
+            })
+        } else {
+            Err("No response generated by assistant".to_string())
+        }
+    }
+
+    /// Resolves (base_url, model, api_key) using the configured Refine/LLM provider.
+    fn resolve_llm_credentials(settings: &crate::settings::AppSettings) -> Result<(String, String, String), String> {
+        let mut candidates = Vec::new();
+
+        // 1. Check active post-processing / refine provider
+        if let Some(p) = settings.active_post_process_provider() {
+            candidates.push(p.clone());
         }
 
-        // Fallback response with any tools invoked summary
-        Ok(AssistantResponse {
-            reply: "I have gathered the information and executed the required tools in your workspace.".to_string(),
-            tools_used,
-            workspace_files: current_files,
-        })
+        // 2. Check online provider
+        if let Some(p) = settings.post_process_providers.iter().find(|p| p.id == settings.online_provider_id) {
+            if !candidates.iter().any(|c| c.id == p.id) {
+                candidates.push(p.clone());
+            }
+        }
+
+        // 3. Add all remaining configured providers
+        for p in &settings.post_process_providers {
+            if !candidates.iter().any(|c| c.id == p.id) {
+                candidates.push(p.clone());
+            }
+        }
+
+        // Find the first candidate with an API key
+        for provider in candidates {
+            let mut api_key = settings
+                .post_process_api_keys
+                .get(&provider.id)
+                .cloned()
+                .unwrap_or_default();
+
+            if api_key.trim().is_empty() {
+                if let Some(alt_key) = settings.online_provider_api_keys.get(&provider.id) {
+                    api_key = alt_key.clone();
+                }
+            }
+
+            // Environment variable fallbacks for developer convenience
+            if api_key.trim().is_empty() {
+                if provider.id == "groq" {
+                    api_key = std::env::var("GROQ_API_KEY").unwrap_or_default();
+                } else if provider.id == "openai" {
+                    api_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+                }
+            }
+
+            if !api_key.trim().is_empty() {
+                let mut model = settings
+                    .post_process_models
+                    .get(&provider.id)
+                    .cloned()
+                    .unwrap_or_default();
+
+                if model.trim().is_empty() {
+                    model = match provider.id.as_str() {
+                        "groq" => "openai/gpt-oss-120b".to_string(),
+                        "openai" => "gpt-4o-mini".to_string(),
+                        _ => "llama-3.1-8b-instant".to_string(),
+                    };
+                }
+
+                let base_url = if provider.base_url.trim().is_empty() {
+                    match provider.id.as_str() {
+                        "groq" => "https://api.groq.com/openai/v1".to_string(),
+                        "openai" => "https://api.openai.com/v1".to_string(),
+                        "openrouter" => "https://openrouter.ai/api/v1".to_string(),
+                        _ => "https://api.groq.com/openai/v1".to_string(),
+                    }
+                } else {
+                    provider.base_url.clone()
+                };
+
+                return Ok((base_url, model, api_key));
+            }
+        }
+
+        Err("No API key configured for any LLM provider (Groq, OpenAI, etc.). Please add an API key in Settings -> Inference or Refine.".to_string())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-
-    #[test]
-    fn test_workspace_file_operations() {
-        let temp_dir = std::env::temp_dir().join(format!("babbl_test_ws_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)));
-        let _ = fs::create_dir_all(&temp_dir);
-
-        // 1. Write file
-        let write_res = WorkspaceManager::write_file(&temp_dir, "notes/test.txt", "Hello Workspace!");
-        assert!(write_res.is_ok(), "Failed to write file: {:?}", write_res);
-
-        // 2. Read file
-        let read_res = WorkspaceManager::read_file(&temp_dir, "notes/test.txt");
-        assert_eq!(read_res.unwrap(), "Hello Workspace!");
-
-        // 3. List files
-        let list_res = WorkspaceManager::list_files(&temp_dir, None);
-        assert!(list_res.is_ok());
-        let files = list_res.unwrap();
-        assert!(files.iter().any(|f| f.name == "test.txt"));
-
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-    }
-
-    #[tokio::test]
-    async fn test_workspace_execute_powershell() {
-        let temp_dir = std::env::temp_dir().join(format!("babbl_test_exec_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)));
-        let _ = fs::create_dir_all(&temp_dir);
-
-        let res = WorkspaceManager::execute_code(&temp_dir, "powershell", "Write-Output 'Babbl Workspace Agent'").await;
-        assert!(res.is_ok(), "Execution failed: {:?}", res);
-        let exec = res.unwrap();
-        assert!(exec.success);
-        assert!(exec.stdout.contains("Babbl Workspace Agent"));
-
-        let _ = fs::remove_dir_all(&temp_dir);
-    }
-
-    #[tokio::test]
-    async fn test_web_searcher() {
-        let res = WebSearcher::search("Rust programming language").await;
-        assert!(res.is_ok(), "Web search failed: {:?}", res);
-        let items = res.unwrap();
-        assert!(!items.is_empty(), "Expected at least one search result");
-        assert!(items.iter().any(|item| item.url.contains("rust") || item.url.contains("wikipedia")));
-    }
-}
-

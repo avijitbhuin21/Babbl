@@ -60,98 +60,112 @@ impl LoopbackRecorder {
             return Ok(());
         }
 
-        let (sample_tx, sample_rx) = mpsc::channel::<Vec<f32>>();
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = device;
+            log::info!("System audio loopback capture is currently supported on Windows via WASAPI. On macOS/Linux, recording will proceed in mic-only mode.");
+            return Ok(());
+        }
 
-        let device = match device {
-            Some(dev) => dev,
-            None => get_default_output_device()?,
-        };
+        #[cfg(target_os = "windows")]
+        {
+            let (sample_tx, sample_rx) = mpsc::channel::<Vec<f32>>();
+            let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
 
-        let thread_device = device.clone();
-        let level_cb = self.level_cb.clone();
-        let frame_cb = self.frame_cb.clone();
-
-        let worker = std::thread::spawn(move || {
-            let config = match thread_device.default_output_config() {
-                Ok(cfg) => cfg,
-                Err(e) => {
-                    log::error!("Failed to fetch default output config for loopback: {}", e);
-                    return;
-                }
+            let device = match device {
+                Some(dev) => dev,
+                None => get_default_output_device()?,
             };
 
-            let sample_rate = config.sample_rate().0;
-            let channels = config.channels() as usize;
+            let thread_device = device.clone();
+            let level_cb = self.level_cb.clone();
+            let frame_cb = self.frame_cb.clone();
 
-            log::info!(
-                "Using loopback device: {} (sample rate: {}, channels: {}, format: {:?})",
-                thread_device
-                    .name()
-                    .unwrap_or_else(|_| "unknown".to_string()),
-                sample_rate,
-                channels,
-                config.sample_format()
-            );
+            let worker = std::thread::spawn(move || {
+                let config = match thread_device.default_output_config() {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        log::error!("Failed to fetch default output config for loopback: {}", e);
+                        return;
+                    }
+                };
 
-            let stream = match config.sample_format() {
-                cpal::SampleFormat::U8 => {
-                    LoopbackRecorder::build_stream::<u8>(&thread_device, &config, sample_tx, channels)
-                }
-                cpal::SampleFormat::I8 => {
-                    LoopbackRecorder::build_stream::<i8>(&thread_device, &config, sample_tx, channels)
-                }
-                cpal::SampleFormat::I16 => {
-                    LoopbackRecorder::build_stream::<i16>(&thread_device, &config, sample_tx, channels)
-                }
-                cpal::SampleFormat::I32 => {
-                    LoopbackRecorder::build_stream::<i32>(&thread_device, &config, sample_tx, channels)
-                }
-                cpal::SampleFormat::F32 => {
-                    LoopbackRecorder::build_stream::<f32>(&thread_device, &config, sample_tx, channels)
-                }
-                _ => {
-                    log::error!("Unsupported loopback sample format");
+                let sample_rate = config.sample_rate().0;
+                let channels = config.channels() as usize;
+
+                log::info!(
+                    "Using loopback device: {} (sample rate: {}, channels: {}, format: {:?})",
+                    thread_device
+                        .name()
+                        .unwrap_or_else(|_| "unknown".to_string()),
+                    sample_rate,
+                    channels,
+                    config.sample_format()
+                );
+
+                let stream = match config.sample_format() {
+                    cpal::SampleFormat::U8 => {
+                        LoopbackRecorder::build_stream::<u8>(&thread_device, &config, sample_tx, channels)
+                    }
+                    cpal::SampleFormat::I8 => {
+                        LoopbackRecorder::build_stream::<i8>(&thread_device, &config, sample_tx, channels)
+                    }
+                    cpal::SampleFormat::I16 => {
+                        LoopbackRecorder::build_stream::<i16>(&thread_device, &config, sample_tx, channels)
+                    }
+                    cpal::SampleFormat::I32 => {
+                        LoopbackRecorder::build_stream::<i32>(&thread_device, &config, sample_tx, channels)
+                    }
+                    cpal::SampleFormat::F32 => {
+                        LoopbackRecorder::build_stream::<f32>(&thread_device, &config, sample_tx, channels)
+                    }
+                    _ => {
+                        log::error!("Unsupported loopback sample format");
+                        return;
+                    }
+                };
+
+                let stream = match stream {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("Failed to build loopback stream: {}", e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = stream.play() {
+                    log::error!("Failed to start loopback stream: {}", e);
                     return;
                 }
-            };
 
-            let stream = match stream {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("Failed to build loopback stream: {}", e);
-                    return;
-                }
-            };
+                run_loopback_consumer(sample_rate, sample_rx, cmd_rx, level_cb, frame_cb);
+            });
 
-            if let Err(e) = stream.play() {
-                log::error!("Failed to start loopback stream: {}", e);
-                return;
-            }
+            self.device = Some(device);
+            self.cmd_tx = Some(cmd_tx);
+            self.worker_handle = Some(worker);
 
-            run_loopback_consumer(sample_rate, sample_rx, cmd_rx, level_cb, frame_cb);
-        });
-
-        self.device = Some(device);
-        self.cmd_tx = Some(cmd_tx);
-        self.worker_handle = Some(worker);
-
-        Ok(())
+            Ok(())
+        }
     }
 
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(tx) = &self.cmd_tx {
-            tx.send(Cmd::Start)?;
+            let _ = tx.send(Cmd::Start);
         }
         Ok(())
     }
 
     pub fn stop(&self) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
-        let (resp_tx, resp_rx) = mpsc::channel();
         if let Some(tx) = &self.cmd_tx {
-            tx.send(Cmd::Stop(resp_tx))?;
+            let (resp_tx, resp_rx) = mpsc::channel();
+            if tx.send(Cmd::Stop(resp_tx)).is_ok() {
+                if let Ok(samples) = resp_rx.recv_timeout(Duration::from_secs(4)) {
+                    return Ok(samples);
+                }
+            }
         }
-        Ok(resp_rx.recv()?)
+        Ok(Vec::new())
     }
 
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {

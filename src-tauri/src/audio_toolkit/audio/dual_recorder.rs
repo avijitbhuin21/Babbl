@@ -98,19 +98,36 @@ impl DualAudioRecorder {
     }
 
     /// Stops both streams, aligns track durations with padding, and mixes them.
+    /// Never discards microphone audio even if loopback fails or is not supported.
     pub fn stop(&mut self) -> Result<MeetingAudio, Box<dyn std::error::Error>> {
         if !self.is_recording {
             return Err("DualAudioRecorder is not currently recording".into());
         }
 
-        let mic_samples = self.mic_recorder.stop()?;
-        let system_samples = self.loopback_recorder.stop()?;
+        // Stop microphone first and guarantee its samples are preserved
+        let mic_samples = match self.mic_recorder.stop() {
+            Ok(samples) => samples,
+            Err(e) => {
+                log::error!("Microphone recorder stop error: {}", e);
+                Vec::new()
+            }
+        };
+
+        // Stop loopback recorder without failing if loopback was unavailable or errored
+        let system_samples = self.loopback_recorder.stop().unwrap_or_else(|e| {
+            log::warn!("Loopback recorder stop warning (non-fatal): {}", e);
+            Vec::new()
+        });
+
         self.is_recording = false;
 
-        // Align both tracks to the same length with zero-padding
         let mic_len = mic_samples.len();
         let sys_len = system_samples.len();
         let max_len = mic_len.max(sys_len);
+
+        if max_len == 0 {
+            return Err("No audio captured from either microphone or system audio".into());
+        }
 
         let mut mic_aligned = mic_samples;
         mic_aligned.resize(max_len, 0.0);
@@ -118,11 +135,15 @@ impl DualAudioRecorder {
         let mut sys_aligned = system_samples;
         sys_aligned.resize(max_len, 0.0);
 
-        // Mix down with headroom: 0.5 * mic + 0.5 * sys
+        // Mix down: if system audio was present, mix 50/50. Otherwise, use full mic audio.
         let mut mixed_samples = Vec::with_capacity(max_len);
-        for i in 0..max_len {
-            let mixed = (mic_aligned[i] * 0.5) + (sys_aligned[i] * 0.5);
-            mixed_samples.push(mixed);
+        if sys_len > 0 {
+            for i in 0..max_len {
+                let mixed = (mic_aligned[i] * 0.5) + (sys_aligned[i] * 0.5);
+                mixed_samples.push(mixed);
+            }
+        } else {
+            mixed_samples = mic_aligned.clone();
         }
 
         let duration_secs = max_len as f32 / crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE as f32;
