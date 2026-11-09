@@ -172,25 +172,24 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         }
     }
     // Get the current theme to set the appropriate initial icon
-    let _initial_theme = tray::get_current_theme(app_handle);
+    let initial_theme = tray::get_current_theme(app_handle);
 
-    let icon_image = Image::from_bytes(include_bytes!("../icons/32x32.png"))
-        .unwrap_or_else(|_| {
-            Image::new(&[0u8; 16 * 16 * 4], 16, 16)
-        });
+    // Choose the appropriate initial icon based on theme
+    let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
 
-    let build_tray = || {
-        #[allow(unused_mut)]
-        let mut builder = TrayIconBuilder::new()
-            .icon(icon_image.clone())
-            .show_menu_on_left_click(true);
-
-        #[cfg(target_os = "macos")]
-        {
-            builder = builder.icon_as_template(true);
-        }
-
-        builder.on_menu_event(|app, event| match event.id.as_ref() {
+    let tray = TrayIconBuilder::new()
+        .icon(
+            Image::from_path(
+                app_handle
+                    .path()
+                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
+        .show_menu_on_left_click(true)
+        .icon_as_template(true)
+        .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => {
                 show_main_window(app);
             }
@@ -221,18 +220,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             _ => {}
         })
-    };
+        .build(app_handle)
+        .unwrap();
+    app_handle.manage(tray);
 
-    match build_tray().build(app_handle) {
-        Ok(tray) => {
-            app_handle.manage(tray);
-            // Initialize tray menu with idle state
-            utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
-        }
-        Err(e) => {
-            log::warn!("Tray icon creation skipped: {:?}", e);
-        }
-    }
+    // Initialize tray menu with idle state
+    utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
@@ -265,19 +258,6 @@ fn trigger_update_check(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(target_os = "windows")]
-    {
-        let existing = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
-        if !existing.contains("--disable-gpu") {
-            let flag = if existing.is_empty() {
-                "--disable-gpu --disable-gpu-compositing".to_string()
-            } else {
-                format!("{} --disable-gpu --disable-gpu-compositing", existing)
-            };
-            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", flag);
-        }
-    }
-
     notify::install_panic_hook();
 
     // Parse console logging directives from RUST_LOG, falling back to info-level logging

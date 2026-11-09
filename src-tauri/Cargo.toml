@@ -114,10 +114,10 @@ windows = { version = "0.61.3", features = [
   "Win32_System_Threading",
   "Win32_System_DataExchange",
 ] }
-transcribe-cpp = { version = "0.2.4", default-features = false }
+transcribe-cpp = { version = "0.2.4", default-features = false, features = ["vulkan"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-transcribe-cpp = { version = "0.2.4", default-features = false }
+transcribe-cpp = { version = "0.2.4", default-features = false, features = ["vulkan"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }

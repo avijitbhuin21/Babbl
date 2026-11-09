@@ -281,9 +281,8 @@ impl ModelManager {
             .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
         let expected_sha = catalog_entry(model_id).map(|e| e.sha256.to_string());
 
-        let url = catalog_entry(model_id)
-            .map(|e| e.upstream.to_string())
-            .or_else(|| model_info.url.clone())
+        let url = model_info
+            .url
             .ok_or_else(|| anyhow::anyhow!("No download URL for model"))?;
         let model_path = self.models_dir.join(&model_info.filename);
         let partial_path = self
@@ -406,7 +405,7 @@ impl ModelManager {
         cancel_flag: &AtomicBool,
     ) -> std::result::Result<u64, DownloadError> {
         let client = reqwest::Client::builder()
-            .user_agent("Babbl/0.1.2")
+            .user_agent(format!("Babbl/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         let mut resume_from = file_len(partial_path);

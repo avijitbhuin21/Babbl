@@ -4,9 +4,9 @@
   "version": "0.2.5",
   "identifier": "com.babbl.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -21,7 +21,7 @@
         "minHeight": 570,
         "resizable": true,
         "maximizable": false,
-        "visible": true
+        "visible": false
       }
     ],
     "security": {
