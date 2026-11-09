@@ -56,9 +56,7 @@ pub fn get_icon_path(theme: AppTheme, state: TrayIconState) -> &'static str {
 }
 
 pub fn change_tray_icon(app: &AppHandle, icon: TrayIconState) {
-    let Some(tray) = app.try_state::<TrayIcon>() else {
-        return;
-    };
+    let tray = app.state::<TrayIcon>();
     let theme = get_current_theme(app);
 
     let icon_path = get_icon_path(theme, icon.clone());
@@ -178,8 +176,7 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState) {
         .expect("failed to create menu"),
     };
 
-    if let Some(tray) = app.try_state::<TrayIcon>() {
-        let _ = tray.set_menu(Some(menu));
-        let _ = tray.set_icon_as_template(true);
-    }
+    let tray = app.state::<TrayIcon>();
+    let _ = tray.set_menu(Some(menu));
+    let _ = tray.set_icon_as_template(true);
 }

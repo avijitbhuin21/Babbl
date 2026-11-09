@@ -126,79 +126,67 @@ pub async fn transcribe_online(
     };
     info!("[Cloud Transcription] Sending request to: {} (translate: {}, whisper: {})", endpoint, translate_to_english, is_whisper_model);
 
+    // Create multipart form
+    let form = reqwest::multipart::Form::new()
+        .text("model", provider.model.clone())
+        .part(
+            "file",
+            reqwest::multipart::Part::bytes(wav_data)
+                .file_name("audio.wav")
+                .mime_str("audio/wav")
+                .map_err(|e| {
+                    error!("[Cloud Transcription] Failed to set MIME type: {}", e);
+                    format!("Failed to set MIME type: {}", e)
+                })?,
+        );
+
+    // Add language if specified and not "auto" (not used for translations endpoint)
+    let form = if !use_translations_endpoint {
+        if let Some(ref lang) = language {
+            if lang != "auto" {
+                info!("[Cloud Transcription] Using language: {}", lang);
+                form.text("language", lang.clone())
+            } else {
+                form
+            }
+        } else {
+            form
+        }
+    } else {
+        form
+    };
+
+    // Detect if this is a GPT-4o transcribe model (uses "instructions" instead of "prompt")
     let is_gpt4o_transcribe = provider.model.to_lowercase().contains("gpt-4o");
+    
+    // For GPT-4o transcribe models with translation enabled, use the "instructions" field
+    // For other non-Whisper models, use the "prompt" field
+    let form = if translate_to_english && !is_whisper_model {
+        if is_gpt4o_transcribe {
+            info!("[Cloud Transcription] Adding translation instructions for GPT-4o transcribe model");
+            form.text("instructions", "Transcribe this audio and translate it to English. Output only the translated English text.")
+        } else {
+            info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
+            form.text("prompt", "Please transcribe this audio and translate it to English.")
+        }
+    } else {
+        form
+    };
 
     // Create HTTP client with authorization header
     let client = reqwest::Client::new();
-    let mut retry_count = 0;
-    let max_retries = 3;
-
-    let response = loop {
-        // Build multipart form fresh for each attempt
-        let mut form = reqwest::multipart::Form::new()
-            .text("model", provider.model.clone())
-            .part(
-                "file",
-                reqwest::multipart::Part::bytes(wav_data.clone())
-                    .file_name("audio.wav")
-                    .mime_str("audio/wav")
-                    .map_err(|e| {
-                        error!("[Cloud Transcription] Failed to set MIME type: {}", e);
-                        format!("Failed to set MIME type: {}", e)
-                    })?,
-            );
-
-        // Add language if specified and not "auto" (not used for translations endpoint)
-        if !use_translations_endpoint {
-            if let Some(ref lang) = language {
-                if lang != "auto" {
-                    info!("[Cloud Transcription] Using language: {}", lang);
-                    form = form.text("language", lang.clone());
-                }
-            }
-        }
-
-        // For GPT-4o transcribe models with translation enabled, use the "instructions" field
-        // For other non-Whisper models, use the "prompt" field
-        if translate_to_english && !is_whisper_model {
-            if is_gpt4o_transcribe {
-                info!("[Cloud Transcription] Adding translation instructions for GPT-4o transcribe model");
-                form = form.text("instructions", "Transcribe this audio and translate it to English. Output only the translated English text.");
-            } else {
-                info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
-                form = form.text("prompt", "Please transcribe this audio and translate it to English.");
-            }
-        }
-
-        info!("[Cloud Transcription] Sending POST request (attempt {})...", retry_count + 1);
-
-        let res = client
-            .post(&endpoint)
-            .bearer_auth(&provider.api_key)
-            .multipart(form)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("[Cloud Transcription] Network error - failed to send request: {}", e);
-                format!("Failed to send transcription request: {}", e)
-            })?;
-
-        let status = res.status();
-        info!("[Cloud Transcription] Received response with status: {}", status);
-
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && retry_count < max_retries {
-            retry_count += 1;
-            let wait_secs = 3.5 + retry_count as f64 * 1.5;
-            log::warn!(
-                "[Cloud Transcription] Hit 429 Rate Limit on '{}'. Waiting {:.1}s before retry {}/{}...",
-                provider.provider_id, wait_secs, retry_count, max_retries
-            );
-            tokio::time::sleep(std::time::Duration::from_secs_f64(wait_secs)).await;
-            continue;
-        }
-
-        break res;
-    };
+    info!("[Cloud Transcription] Sending POST request...");
+    
+    let response = client
+        .post(&endpoint)
+        .bearer_auth(&provider.api_key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("[Cloud Transcription] Network error - failed to send request: {}", e);
+            format!("Failed to send transcription request: {}", e)
+        })?;
 
     let status = response.status();
     if !status.is_success() {

@@ -1039,32 +1039,15 @@ export type BindingResponse = { success: boolean; binding: ShortcutBinding | nul
 export type BuildInfo = { version: string; git_hash: string; updater_pubkey_fingerprint: string; updater_endpoint: string }
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
-export type DiarizationConfig = { mode: DiarizationMode; 
+export type DiarizationConfig = { 
 /**
- * Cosine similarity threshold for local clustering (0.0 to 1.0, default: 0.70)
+ * Cosine similarity threshold for speaker separation (0.0 to 1.0, default: 0.70)
  */
 similarity_threshold: number; 
-/**
- * Optional API key for Cloud API diarization
- */
-api_key: string | null; 
-/**
- * Cloud provider name (e.g. "deepgram", "assemblyai")
- */
-api_provider: string | null; 
 /**
  * Whether to translate speech into English
  */
 translate_to_english: boolean }
-export type DiarizationMode = 
-/**
- * Local on-device clustering using acoustic voice embeddings
- */
-"Local" | 
-/**
- * Cloud API diarization (Deepgram Nova-2, AssemblyAI, etc.)
- */
-"CloudApi"
 /**
  * A timestamped transcript segment tagged with speaker attribution.
  */

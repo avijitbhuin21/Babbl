@@ -480,5 +480,85 @@
     "transcribing": "Transcribing...",
     "refining": "Refining...",
     "error": "Error"
+  },
+  "meeting": {
+    "title": "Meeting Mode",
+    "description": "Dual-track recording captures your microphone (\"You\") and conference audio (\"Attendee\") with live transcription and automatic Minutes of Meeting.",
+    "headphoneTip": "Tip: Wear headphones during meetings to prevent remote attendee speech from echoing back into your microphone.",
+    "status": {
+      "recording": "RECORDING",
+      "processing": "TRANSCRIBING & GENERATING MOM...",
+      "idle": "Idle"
+    },
+    "actions": {
+      "start": "Start Meeting Mode",
+      "end": "End Meeting & Create MOM",
+      "copyTranscript": "Copy",
+      "copyMom": "Copy MOM",
+      "copied": "Copied",
+      "downloadPdf": "Download PDF",
+      "sendEmail": "Send via Gmail"
+    },
+    "tabs": {
+      "live": "Live Meeting & MOM",
+      "copilot": "AI Copilot & Assistant",
+      "history": "Past Meetings Memory"
+    },
+    "monitors": {
+      "title": "Audio Channels",
+      "info": "Dual-channel capture isolates your voice on channel 0 and meeting participants on channel 1.",
+      "duration": "Duration",
+      "live": "LIVE",
+      "stopped": "STOPPED",
+      "mic": "Your Microphone (You)",
+      "micDesc": "Dedicated user voice stream with zero speaker ambiguity",
+      "system": "System / Attendees Audio",
+      "systemDesc": "WASAPI loopback capturing Zoom, Teams & browser audio"
+    },
+    "configuration": {
+      "title": "Capture & Transcription Settings",
+      "info": "Configure dual-channel audio capture and automatic English translation.",
+      "translateLabel": "Translate foreign speech to English",
+      "translateDesc": "Automatically translates speech from foreign languages to English during transcription",
+      "separationThreshold": "Speaker Separation Threshold",
+      "separationDesc": "Cosine similarity cutoff for clustering remote speakers"
+    },
+    "liveTranscript": {
+      "title": "Ongoing Real-Time Meeting Transcript",
+      "turns": "{{count}} spoken turns",
+      "askCopilot": "Ask Copilot About Ongoing Meeting",
+      "listening": "Listening for speech... Continuous live transcription streams here automatically."
+    },
+    "results": {
+      "diarizedTranscript": "Dual-Track English Transcript",
+      "turnsCount": "({{count}} turns)",
+      "noSpeech": "No speech segments detected.",
+      "momTitle": "Generated Minutes of Meeting (MOM)",
+      "readyToSend": "Ready to Send",
+      "noMom": "No MOM generated yet."
+    },
+    "emptyState": {
+      "title": "No Meeting Recorded Yet",
+      "description": "Click Start Meeting Mode above before starting your Google Meet, Zoom, or online call. Both your microphone and attendee audio will be captured and converted into structured Minutes of Meeting."
+    },
+    "emailModal": {
+      "title": "Send MOM via Gmail",
+      "description": "Dispatch meeting minutes using your Gmail account & App Password.",
+      "senderLabel": "Your Gmail Address",
+      "senderPlaceholder": "e.g. you@gmail.com",
+      "passwordLabel": "Gmail App Password",
+      "passwordHint": "16-character Google App Password",
+      "passwordTip": "Generate in your Google Account → Security → 2-Step Verification → App Passwords.",
+      "recipientsLabel": "Recipients (comma or newline separated)",
+      "recipientsPlaceholder": "colleague@example.com, manager@example.com",
+      "subjectLabel": "Email Subject",
+      "subjectPlaceholder": "Meeting Summary",
+      "attachmentTitle": "Full Transcript & AI Notes PDF Attached",
+      "attachmentDesc": "Includes complete speaker diarization, timestamps, and MOM",
+      "preview": "Preview",
+      "cancel": "Cancel",
+      "send": "Send MOM Now",
+      "sending": "Sending Email..."
+    }
   }
 }

@@ -160,7 +160,7 @@ fn model_info_from(entry: &CatalogEntry) -> ModelInfo {
         name: entry.name.to_string(),
         description: entry.description.to_string(),
         filename: entry.filename.to_string(),
-        url: Some(entry.upstream.to_string()),
+        url: Some(format!("{}{}", MODEL_BASE_URL, entry.filename)),
         size_mb: entry.size_bytes / (1024 * 1024),
         is_downloaded: false,
         is_downloading: false,
