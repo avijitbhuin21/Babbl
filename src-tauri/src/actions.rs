@@ -30,11 +30,12 @@ pub trait ShortcutAction: Send + Sync {
 struct TranscribeAction;
 
 /// Online provider configuration for audio transcription
-struct OnlineTranscriptionProvider {
-    provider_id: String,
-    base_url: String,
-    model: String,
-    api_key: String,
+#[derive(Clone, Debug)]
+pub struct OnlineTranscriptionProvider {
+    pub provider_id: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
 }
 
 /// Convert f32 audio samples to WAV format in memory
@@ -70,7 +71,7 @@ fn convert_samples_to_wav(audio_samples: &[f32]) -> Result<Vec<u8>, String> {
 }
 
 /// Transcribe audio using an online provider (OpenAI, Groq, Gemini)
-async fn transcribe_online(
+pub async fn transcribe_online(
     provider: OnlineTranscriptionProvider,
     audio_samples: Vec<f32>,
     language: Option<String>,
@@ -125,71 +126,81 @@ async fn transcribe_online(
     };
     info!("[Cloud Transcription] Sending request to: {} (translate: {}, whisper: {})", endpoint, translate_to_english, is_whisper_model);
 
-    // Create multipart form
-    let form = reqwest::multipart::Form::new()
-        .text("model", provider.model.clone())
-        .part(
-            "file",
-            reqwest::multipart::Part::bytes(wav_data)
-                .file_name("audio.wav")
-                .mime_str("audio/wav")
-                .map_err(|e| {
-                    error!("[Cloud Transcription] Failed to set MIME type: {}", e);
-                    format!("Failed to set MIME type: {}", e)
-                })?,
-        );
-
-    // Add language if specified and not "auto" (not used for translations endpoint)
-    let form = if !use_translations_endpoint {
-        if let Some(ref lang) = language {
-            if lang != "auto" {
-                info!("[Cloud Transcription] Using language: {}", lang);
-                form.text("language", lang.clone())
-            } else {
-                form
-            }
-        } else {
-            form
-        }
-    } else {
-        form
-    };
-
-    // Detect if this is a GPT-4o transcribe model (uses "instructions" instead of "prompt")
     let is_gpt4o_transcribe = provider.model.to_lowercase().contains("gpt-4o");
-    
-    // For GPT-4o transcribe models with translation enabled, use the "instructions" field
-    // For other non-Whisper models, use the "prompt" field
-    let form = if translate_to_english && !is_whisper_model {
-        if is_gpt4o_transcribe {
-            info!("[Cloud Transcription] Adding translation instructions for GPT-4o transcribe model");
-            form.text("instructions", "Transcribe this audio and translate it to English. Output only the translated English text.")
-        } else {
-            info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
-            form.text("prompt", "Please transcribe this audio and translate it to English.")
-        }
-    } else {
-        form
-    };
 
     // Create HTTP client with authorization header
     let client = reqwest::Client::new();
-    info!("[Cloud Transcription] Sending POST request...");
-    
-    let response = client
-        .post(&endpoint)
-        .bearer_auth(&provider.api_key)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| {
-            error!("[Cloud Transcription] Network error - failed to send request: {}", e);
-            format!("Failed to send transcription request: {}", e)
-        })?;
+    let mut retry_count = 0;
+    let max_retries = 3;
+
+    let response = loop {
+        // Build multipart form fresh for each attempt
+        let mut form = reqwest::multipart::Form::new()
+            .text("model", provider.model.clone())
+            .part(
+                "file",
+                reqwest::multipart::Part::bytes(wav_data.clone())
+                    .file_name("audio.wav")
+                    .mime_str("audio/wav")
+                    .map_err(|e| {
+                        error!("[Cloud Transcription] Failed to set MIME type: {}", e);
+                        format!("Failed to set MIME type: {}", e)
+                    })?,
+            );
+
+        // Add language if specified and not "auto" (not used for translations endpoint)
+        if !use_translations_endpoint {
+            if let Some(ref lang) = language {
+                if lang != "auto" {
+                    info!("[Cloud Transcription] Using language: {}", lang);
+                    form = form.text("language", lang.clone());
+                }
+            }
+        }
+
+        // For GPT-4o transcribe models with translation enabled, use the "instructions" field
+        // For other non-Whisper models, use the "prompt" field
+        if translate_to_english && !is_whisper_model {
+            if is_gpt4o_transcribe {
+                info!("[Cloud Transcription] Adding translation instructions for GPT-4o transcribe model");
+                form = form.text("instructions", "Transcribe this audio and translate it to English. Output only the translated English text.");
+            } else {
+                info!("[Cloud Transcription] Adding translation prompt for non-Whisper model");
+                form = form.text("prompt", "Please transcribe this audio and translate it to English.");
+            }
+        }
+
+        info!("[Cloud Transcription] Sending POST request (attempt {})...", retry_count + 1);
+
+        let res = client
+            .post(&endpoint)
+            .bearer_auth(&provider.api_key)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("[Cloud Transcription] Network error - failed to send request: {}", e);
+                format!("Failed to send transcription request: {}", e)
+            })?;
+
+        let status = res.status();
+        info!("[Cloud Transcription] Received response with status: {}", status);
+
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && retry_count < max_retries {
+            retry_count += 1;
+            let wait_secs = 3.5 + retry_count as f64 * 1.5;
+            log::warn!(
+                "[Cloud Transcription] Hit 429 Rate Limit on '{}'. Waiting {:.1}s before retry {}/{}...",
+                provider.provider_id, wait_secs, retry_count, max_retries
+            );
+            tokio::time::sleep(std::time::Duration::from_secs_f64(wait_secs)).await;
+            continue;
+        }
+
+        break res;
+    };
 
     let status = response.status();
-    info!("[Cloud Transcription] Received response with status: {}", status);
-
     if !status.is_success() {
         let error_text = response
             .text()
@@ -512,7 +523,7 @@ async fn transcribe_online_chat_audio(
 }
 
 /// Get the online provider configuration from settings
-fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTranscriptionProvider> {
+pub fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTranscriptionProvider> {
     let provider_id = &settings.online_provider_id;
     let api_key = settings
         .online_provider_api_keys
@@ -561,6 +572,43 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
         model,
         api_key,
     })
+}
+
+/// Unified transcription helper that respects user settings (online provider vs local model)
+/// with automatic fallback to online provider if local model is not loaded.
+pub async fn transcribe_audio(
+    app_handle: &AppHandle,
+    samples: Vec<f32>,
+    translate_to_english: bool,
+) -> Result<String, String> {
+    let settings = get_settings(app_handle);
+    if settings.use_online_provider {
+        if let Some(provider) = get_online_transcription_provider(&settings) {
+            let language = if settings.selected_language == "auto" {
+                None
+            } else {
+                Some(settings.selected_language.clone())
+            };
+            transcribe_online(provider, samples, language, translate_to_english).await
+        } else {
+            Err("Online provider is not configured. Please add an API key under Online Providers in Settings.".to_string())
+        }
+    } else {
+        let tm = app_handle.state::<Arc<TranscriptionManager>>();
+        if !tm.is_model_loaded() {
+            // Automatic fallback: if local model is not loaded, check if an online provider is configured!
+            if let Some(provider) = get_online_transcription_provider(&settings) {
+                log::info!("Local model not loaded in RAM; falling back to online provider '{}' for meeting audio", provider.provider_id);
+                let language = if settings.selected_language == "auto" {
+                    None
+                } else {
+                    Some(settings.selected_language.clone())
+                };
+                return transcribe_online(provider, samples, language, translate_to_english).await;
+            }
+        }
+        tm.transcribe(samples).map_err(|e| format!("Local transcription failed: {}", e))
+    }
 }
 
 

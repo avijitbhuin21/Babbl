@@ -5,6 +5,7 @@ export { HistorySettings } from "./history/HistorySettings";
 export { AboutSettings } from "./about/AboutSettings";
 export { PostProcessingSettings } from "./post-processing/PostProcessingSettings";
 export { SyncSettings } from "./sync/SyncSettings";
+export { MeetingSettings } from "./meeting/MeetingSettings";
 
 // Individual setting components
 export { MicrophoneSelector } from "./MicrophoneSelector";

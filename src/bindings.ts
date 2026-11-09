@@ -934,6 +934,110 @@ async updateRecordingRetentionPeriod(period: string) : Promise<Result<null, stri
     else return { status: "error", error: e  as any };
 }
 },
+async startMeeting(config: DiarizationConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_meeting", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopMeeting() : Promise<Result<MeetingResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_meeting") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getMeetingStatus() : Promise<Result<MeetingStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_meeting_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getLastMeeting() : Promise<Result<MeetingResult | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_last_meeting") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getLiveMeetingTranscript() : Promise<Result<MeetingTranscript, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_live_meeting_transcript") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sendMeetingMomEmail(request: SendMomEmailRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("send_meeting_mom_email", { request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async askMeetingAssistant(request: AssistantQueryRequest) : Promise<Result<AssistantResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("ask_meeting_assistant", { request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getWorkspaceFiles(subpath?: string | null) : Promise<Result<WorkspaceFileEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_workspace_files", { subpath: subpath ?? null }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readWorkspaceFile(path: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_workspace_file", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async writeWorkspaceFile(path: string, content: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_workspace_file", { path, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async executeWorkspaceCode(language: string, code: string) : Promise<Result<CodeExecutionResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("execute_workspace_code", { language, code }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getPastMeetings(query?: string | null) : Promise<Result<PastMeetingRecord[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_past_meetings", { query: query ?? null }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openWorkspaceFolder() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_workspace_folder") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Checks if the Mac is a laptop by detecting battery presence
  * 
@@ -975,10 +1079,59 @@ export type BindingResponse = { success: boolean; binding: ShortcutBinding | nul
 export type BuildInfo = { version: string; git_hash: string; updater_pubkey_fingerprint: string; updater_endpoint: string }
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
+export type DiarizationConfig = { mode: DiarizationMode; 
+/**
+ * Cosine similarity threshold for local clustering (0.0 to 1.0, default: 0.70)
+ */
+similarity_threshold: number; 
+/**
+ * Optional API key for Cloud API diarization
+ */
+api_key: string | null; 
+/**
+ * Cloud provider name (e.g. "deepgram", "assemblyai")
+ */
+api_provider: string | null; 
+/**
+ * Whether to translate speech into English
+ */
+translate_to_english: boolean }
+export type DiarizationMode = 
+/**
+ * Local on-device clustering using acoustic voice embeddings
+ */
+"Local" | 
+/**
+ * Cloud API diarization (Deepgram Nova-2, AssemblyAI, etc.)
+ */
+"CloudApi"
+/**
+ * A timestamped transcript segment tagged with speaker attribution.
+ */
+export type DiarizedSegment = { 
+/**
+ * Speaker label: "You" for the local user, "Speaker 1", "Speaker 2", etc. for remote attendees.
+ */
+speaker: string; start_secs: number; end_secs: number; text: string }
 export type DiscoveredDevice = { device_id: string; name: string; address: string; same_group: boolean }
 export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null }
 export type LLMPrompt = { id: string; name: string; prompt: string }
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
+export type MeetingMom = { title: string; created_at: string; duration_secs: number; participants: string[]; summary_markdown: string; raw_transcript: string }
+export type MeetingResult = { transcript: MeetingTranscript; mom: MeetingMom | null }
+export type MeetingStatus = { is_recording: boolean; elapsed_secs: number }
+export type SendMomEmailRequest = { sender_email: string; app_password: string; recipients: string[]; subject: string; mom_markdown: string; pdf_base64: string | null; pdf_filename: string | null }
+export type ChatMessage = { role: string; content: string }
+export type WorkspaceFileEntry = { name: string; relative_path: string; is_dir: boolean; size_bytes: number; modified_at: string }
+export type CodeExecutionResult = { language: string; stdout: string; stderr: string; exit_code: number; success: boolean }
+export type SearchResult = { title: string; snippet: string; url: string }
+export type AssistantQueryRequest = { query: string; current_transcript?: string | null; history: ChatMessage[] }
+export type AssistantResponse = { reply: string; tools_used: string[]; workspace_files: WorkspaceFileEntry[] }
+export type PastMeetingRecord = { id: number; timestamp: number; created_at: string; title: string; duration_secs: number; participants: string[]; summary_markdown: string; full_transcript: string }
+/**
+ * Complete structured meeting transcript.
+ */
+export type MeetingTranscript = { segments: DiarizedSegment[]; full_text: string; duration_secs: number; speakers: string[] }
 export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; 
 /**
  * Shows text live while recording (streaming-capable model).

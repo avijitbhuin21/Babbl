@@ -68,7 +68,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
   };
 
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-64 bg-background border border-mid-gray/20 rounded-lg shadow-lg py-2 z-50">
+    <div className="absolute bottom-full left-0 mb-2 w-80 sm:w-96 max-h-[70vh] overflow-y-auto custom-scrollbar bg-background border border-mid-gray/20 rounded-lg shadow-2xl py-2 z-50">
       {/* First Run Welcome */}
       {isFirstRun && (
         <div className="px-3 py-2 bg-background-ui/10 border-b border-background-ui/20">
@@ -84,7 +84,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
       {/* Available Models */}
       {availableModels.length > 0 && (
         <div>
-          <div className="px-3 py-1 text-xs font-medium text-text/80 border-b border-mid-gray/10">
+          <div className="sticky top-0 bg-background/95 backdrop-blur-xs px-3 py-1.5 text-xs font-medium text-text/80 border-b border-mid-gray/10 z-10">
             {t("modelSelector.availableModels")}
           </div>
           {availableModels.map((model) => (
@@ -105,17 +105,17 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                 }`}
             >
               <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm">
+                <div className="flex-1 min-w-0 mr-3">
+                  <div className="text-sm font-medium">
                     {getTranslatedModelName(model, t)}
                   </div>
-                  <div className="text-xs text-text/40 italic pr-4">
+                  <div className="text-xs text-text/50 italic pr-2">
                     {getTranslatedModelDescription(model, t)}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {currentModelId === model.id && (
-                    <div className="text-xs text-background-ui">
+                    <div className="text-xs text-background-ui font-medium">
                       {t("modelSelector.active")}
                     </div>
                   )}
@@ -128,7 +128,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                       })}
                     >
                       <svg
-                        className="w-3 h-3"
+                        className="w-3.5 h-3.5"
                         fill="currentColor"
                         viewBox="0 0 20 20"
                       >
@@ -153,7 +153,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
           {(availableModels.length > 0 || isFirstRun) && (
             <div className="border-t border-mid-gray/10 my-1" />
           )}
-          <div className="px-3 py-1 text-xs font-medium text-text/80">
+          <div className="sticky top-0 bg-background/95 backdrop-blur-xs px-3 py-1.5 text-xs font-medium text-text/80 border-b border-mid-gray/10 z-10">
             {isFirstRun
               ? t("modelSelector.chooseModel")
               : t("modelSelector.downloadModels")}
@@ -181,21 +181,21 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm">
+                  <div className="flex-1 min-w-0 mr-3">
+                    <div className="text-sm font-medium">
                       {getTranslatedModelName(model, t)}
                       {model.supports_streaming && (
-                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded">
+                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded font-normal">
                           {t("modelSelector.live", "Live")}
                         </span>
                       )}
                       {model.id === "parakeet-unified-en-0.6b" && isFirstRun && (
-                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded">
+                        <span className="ml-2 text-xs bg-background-ui/20 text-background-ui px-1.5 py-0.5 rounded font-normal">
                           {t("onboarding.recommended")}
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-text/40 italic pr-4">
+                    <div className="text-xs text-text/50 italic pr-2">
                       {getTranslatedModelDescription(model, t)}
                     </div>
                     <div className="mt-1 text-xs text-text/50 tabular-nums">
@@ -203,8 +203,8 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                       {formatModelSize(Number(model.size_mb))}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1 text-xs text-background-ui tabular-nums">
-                    <span>
+                  <div className="flex flex-col items-end gap-1 text-xs text-background-ui tabular-nums shrink-0">
+                    <span className="font-medium">
                       {isDownloading && progress
                         ? `${Math.max(0, Math.min(100, Math.round(progress.percentage)))}%`
                         : Number(model.partial_size) > 0

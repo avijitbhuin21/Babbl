@@ -1,6 +1,7 @@
 {
   "sidebar": {
     "general": "General",
+    "meeting": "Meeting Mode",
     "advanced": "Advanced",
     "postProcessing": "Post Process",
     "cloudProviders": "Cloud Providers",

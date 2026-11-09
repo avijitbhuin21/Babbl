@@ -303,8 +303,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       }
     } catch (err) {
       console.error("Failed to load current model:", err);
-      setModelStatus("error");
-      setModelError("Failed to check model status");
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+        setModelStatus("error");
+        setModelError("Failed to check model status");
+      }
     }
   };
 

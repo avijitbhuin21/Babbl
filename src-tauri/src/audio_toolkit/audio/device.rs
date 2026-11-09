@@ -50,3 +50,43 @@ pub fn list_output_devices() -> Result<Vec<CpalDeviceInfo>, Box<dyn std::error::
 
     Ok(out)
 }
+
+pub fn get_default_output_device() -> Result<cpal::Device, Box<dyn std::error::Error>> {
+    let host = crate::audio_toolkit::get_cpal_host();
+    host.default_output_device()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No default output device found").into())
+}
+
+pub fn get_output_device_by_name(name: &str) -> Result<cpal::Device, Box<dyn std::error::Error>> {
+    let host = crate::audio_toolkit::get_cpal_host();
+    for device in host.output_devices()? {
+        if device.name().map(|n| n == name).unwrap_or(false) {
+            return Ok(device);
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("Output device '{}' not found", name),
+    )
+    .into())
+}
+
+pub fn get_default_input_device() -> Result<cpal::Device, Box<dyn std::error::Error>> {
+    let host = crate::audio_toolkit::get_cpal_host();
+    host.default_input_device()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No default input device found").into())
+}
+
+pub fn get_input_device_by_name(name: &str) -> Result<cpal::Device, Box<dyn std::error::Error>> {
+    let host = crate::audio_toolkit::get_cpal_host();
+    for device in host.input_devices()? {
+        if device.name().map(|n| n == name).unwrap_or(false) {
+            return Ok(device);
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("Input device '{}' not found", name),
+    )
+    .into())
+}

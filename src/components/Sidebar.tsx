@@ -25,6 +25,7 @@ import {
 } from "./settings";
 import { InferenceSettings } from "./settings/inference/InferenceSettings";
 import { RefineSettings } from "./settings/refine/RefineSettings";
+import { MeetingSettings } from "./settings/meeting/MeetingSettings";
 import { useNavStore, type RailId, type TranscribePage } from "../stores/navStore";
 import UpdateChecker from "./update-checker";
 
@@ -37,19 +38,6 @@ interface PageConfig {
   component: React.ComponentType;
 }
 
-/** Placeholder for features that are planned but not built yet. */
-const ComingSoon: React.FC = () => {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-surface/50 py-16 text-center">
-      <span className="text-sm font-medium text-text/80">{t("nav.comingSoon.title", "Coming soon")}</span>
-      <span className="max-w-xs text-xs text-text/50">
-        {t("nav.comingSoon.description", "This feature is on the way. Check back after the next update.")}
-      </span>
-    </div>
-  );
-};
-
 export const TRANSCRIBE_PAGES: Record<TranscribePage, PageConfig> = {
   general: { labelKey: "sidebar.general", fallback: "General", icon: SlidersHorizontal, component: GeneralSettings },
   inference: { labelKey: "nav.inference", fallback: "Inference", icon: Cpu, component: InferenceSettings },
@@ -61,7 +49,7 @@ export const TRANSCRIBE_PAGES: Record<TranscribePage, PageConfig> = {
 export const RAIL_ITEMS: Record<RailId, PageConfig> = {
   transcribe: { labelKey: "nav.transcribe", fallback: "Transcribe", icon: AudioLines, component: GeneralSettings },
   sync: { labelKey: "nav.sync", fallback: "Sync", icon: ArrowLeftRight, component: SyncSettings },
-  meeting: { labelKey: "nav.meetingAssistant", fallback: "Meeting assistant", icon: Users, component: ComingSoon },
+  meeting: { labelKey: "nav.meetingAssistant", fallback: "Meeting assistant", icon: Users, component: MeetingSettings },
   about: { labelKey: "sidebar.about", fallback: "About", icon: Info, component: AboutSettings },
 };
 

@@ -31,7 +31,32 @@ static MIGRATIONS: &[M] = &[
     ),
     M::up("ALTER TABLE transcription_history ADD COLUMN post_processed_text TEXT;"),
     M::up("ALTER TABLE transcription_history ADD COLUMN post_process_prompt TEXT;"),
+    M::up(
+        "CREATE TABLE IF NOT EXISTS meetings_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            title TEXT NOT NULL,
+            duration_secs REAL NOT NULL,
+            participants TEXT NOT NULL,
+            summary_markdown TEXT NOT NULL,
+            full_transcript TEXT NOT NULL,
+            segments_json TEXT NOT NULL
+        );",
+    ),
 ];
+
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+pub struct PastMeetingRecord {
+    pub id: i64,
+    pub timestamp: i64,
+    pub created_at: String,
+    pub title: String,
+    pub duration_secs: f32,
+    pub participants: Vec<String>,
+    pub summary_markdown: String,
+    pub full_transcript: String,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct HistoryEntry {
@@ -474,5 +499,112 @@ impl HistoryManager {
         } else {
             format!("Recording {}", timestamp)
         }
+    }
+
+    /// Saves a completed meeting record to persistent history.
+    pub fn save_meeting(
+        &self,
+        title: &str,
+        duration_secs: f32,
+        participants: &[String],
+        summary_markdown: &str,
+        full_transcript: &str,
+        segments_json: &str,
+    ) -> Result<i64> {
+        let conn = self.get_connection()?;
+        let timestamp = Utc::now().timestamp();
+        let created_at = Utc::now().to_rfc3339();
+        let participants_str = participants.join(", ");
+
+        conn.execute(
+            "INSERT INTO meetings_history (
+                timestamp, created_at, title, duration_secs, participants, summary_markdown, full_transcript, segments_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                timestamp,
+                created_at,
+                title,
+                duration_secs,
+                participants_str,
+                summary_markdown,
+                full_transcript,
+                segments_json
+            ],
+        )?;
+
+        let id = conn.last_insert_rowid();
+        info!("Saved meeting to history (id: {}, title: '{}')", id, title);
+
+        let _ = self.app_handle.emit("meeting-history-updated", ());
+        Ok(id)
+    }
+
+    /// Queries past meetings by optional text search query across title, MOM, transcript, or participants.
+    pub fn get_past_meetings(&self, query: Option<&str>) -> Result<Vec<PastMeetingRecord>> {
+        let conn = self.get_connection()?;
+
+        let sql = match query.filter(|q| !q.trim().is_empty()) {
+            Some(_) => {
+                "SELECT id, timestamp, created_at, title, duration_secs, participants, summary_markdown, full_transcript
+                 FROM meetings_history
+                 WHERE title LIKE ?1 OR summary_markdown LIKE ?1 OR full_transcript LIKE ?1 OR participants LIKE ?1
+                 ORDER BY timestamp DESC
+                 LIMIT 50"
+            }
+            None => {
+                "SELECT id, timestamp, created_at, title, duration_secs, participants, summary_markdown, full_transcript
+                 FROM meetings_history
+                 ORDER BY timestamp DESC
+                 LIMIT 50"
+            }
+        };
+
+        let mut stmt = conn.prepare(sql)?;
+        let rows = if let Some(q) = query.filter(|q| !q.trim().is_empty()) {
+            let pattern = format!("%{}%", q.trim());
+            stmt.query_map(params![pattern], |row| {
+                let participants_str: String = row.get(5)?;
+                let participants = participants_str
+                    .split(',')
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                Ok(PastMeetingRecord {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    created_at: row.get(2)?,
+                    title: row.get(3)?,
+                    duration_secs: row.get(4)?,
+                    participants,
+                    summary_markdown: row.get(6)?,
+                    full_transcript: row.get(7)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect()
+        } else {
+            stmt.query_map([], |row| {
+                let participants_str: String = row.get(5)?;
+                let participants = participants_str
+                    .split(',')
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                Ok(PastMeetingRecord {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    created_at: row.get(2)?,
+                    title: row.get(3)?,
+                    duration_secs: row.get(4)?,
+                    participants,
+                    summary_markdown: row.get(6)?,
+                    full_transcript: row.get(7)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect()
+        };
+
+        Ok(rows)
     }
 }
