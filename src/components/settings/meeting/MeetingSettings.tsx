@@ -24,6 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { type as getOsType } from "@tauri-apps/plugin-os";
 import { toast } from "sonner";
 import {
   commands,
@@ -48,6 +49,13 @@ export const MeetingSettings: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const isWindows = (() => {
+    try {
+      return getOsType() === "windows";
+    } catch {
+      return true;
+    }
+  })();
 
   // Audio level meters (0.0 to 1.0)
   const [micLevel, setMicLevel] = useState(0);
@@ -325,7 +333,21 @@ export const MeetingSettings: React.FC = () => {
       const res = await commands.startMeeting(config);
       if (res.status === "ok") {
         setIsRecording(true);
-        toast.success(t("meeting.status.startedToast", "Meeting recording started. Listening to mic & system audio."));
+        if (isWindows) {
+          toast.success(
+            t(
+              "meeting.status.startedToast",
+              "Meeting recording started. Listening to mic & system audio."
+            )
+          );
+        } else {
+          toast.success(
+            t(
+              "meeting.status.startedToastMicOnly",
+              "Meeting recording started. Listening to microphone (system audio loopback is Windows-only)."
+            )
+          );
+        }
       } else {
         toast.error(`Failed to start meeting: ${res.error}`);
       }
@@ -441,7 +463,9 @@ export const MeetingSettings: React.FC = () => {
               {t("meeting.status.recording", "RECORDING")} ({formatTimer(elapsedSeconds)})
             </span>
             <span className="text-xs text-text/50 hidden sm:inline">
-              Mic: {(micLevel * 100).toFixed(0)}% &bull; System: {(systemLevel * 100).toFixed(0)}%
+              {isWindows
+                ? `Mic: ${(micLevel * 100).toFixed(0)}% • System: ${(systemLevel * 100).toFixed(0)}%`
+                : `Mic: ${(micLevel * 100).toFixed(0)}% (Mic-only)`}
             </span>
           </div>
           <Button
@@ -531,6 +555,29 @@ export const MeetingSettings: React.FC = () => {
             </div>
           </div>
 
+          {/* macOS / Linux Notice Banner */}
+          {!isWindows && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start gap-2.5">
+              <InfoTip
+                text={t(
+                  "meeting.platformNoticeTooltip",
+                  "System audio loopback requires Windows WASAPI. On macOS/Linux, Babbl records your microphone cleanly."
+                )}
+              />
+              <div>
+                <p className="font-medium text-amber-100">
+                  {t("meeting.platformNoticeTitle", "Microphone-Only Capture (macOS / Linux)")}
+                </p>
+                <p className="text-amber-200/80 mt-0.5 text-[11px] leading-relaxed">
+                  {t(
+                    "meeting.platformNoticeDesc",
+                    "Meeting Mode captures your microphone on this platform. Dual-track system audio loopback capture is currently supported on Windows."
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Audio Channels & Live Monitoring */}
           <SettingsGroup
             title={t("meeting.monitors.title", "Audio Channels")}
@@ -539,7 +586,11 @@ export const MeetingSettings: React.FC = () => {
               "Dual-channel capture isolates your voice on channel 0 and meeting participants on channel 1."
             )}
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/30 p-4 gap-4">
+            <div
+              className={`grid grid-cols-1 ${
+                isWindows ? "md:grid-cols-3" : "md:grid-cols-2"
+              } divide-y md:divide-y-0 md:divide-x divide-border/30 p-4 gap-4`}
+            >
               {/* Duration */}
               <div className="flex flex-col justify-between space-y-2">
                 <div className="flex items-center justify-between text-xs text-text/60">
@@ -557,7 +608,9 @@ export const MeetingSettings: React.FC = () => {
                   {formatTimer(elapsedSeconds)}
                 </div>
                 <p className="text-[11px] text-text/40">
-                  16 kHz synchronous dual-track
+                  {isWindows
+                    ? "16 kHz synchronous dual-track"
+                    : "16 kHz microphone recording"}
                 </p>
               </div>
 
@@ -581,25 +634,27 @@ export const MeetingSettings: React.FC = () => {
                 </p>
               </div>
 
-              {/* System Audio Level */}
-              <div className="flex flex-col justify-between space-y-2 md:pl-4">
-                <div className="flex items-center justify-between text-xs text-text/60">
-                  <span className="flex items-center gap-1.5">
-                    <Volume2 size={14} className="text-emerald-400" />
-                    {t("meeting.monitors.system", "System / Attendees Audio")}
-                  </span>
-                  <span className="font-mono text-[11px] text-emerald-400">CH 1</span>
+              {/* System Audio Level (Windows only) */}
+              {isWindows && (
+                <div className="flex flex-col justify-between space-y-2 md:pl-4">
+                  <div className="flex items-center justify-between text-xs text-text/60">
+                    <span className="flex items-center gap-1.5">
+                      <Volume2 size={14} className="text-emerald-400" />
+                      {t("meeting.monitors.system", "System / Attendees Audio")}
+                    </span>
+                    <span className="font-mono text-[11px] text-emerald-400">CH 1</span>
+                  </div>
+                  <div className="w-full bg-mid-gray/20 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-75"
+                      style={{ width: `${Math.min(100, Math.max(4, systemLevel * 100))}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-text/40">
+                    {t("meeting.monitors.systemDesc", "System loopback capturing Zoom, Teams & calls")}
+                  </p>
                 </div>
-                <div className="w-full bg-mid-gray/20 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-75"
-                    style={{ width: `${Math.min(100, Math.max(4, systemLevel * 100))}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-text/40">
-                  {t("meeting.monitors.systemDesc", "System loopback capturing Zoom, Teams & calls")}
-                </p>
-              </div>
+              )}
             </div>
           </SettingsGroup>
 

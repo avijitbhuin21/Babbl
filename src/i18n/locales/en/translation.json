@@ -488,8 +488,14 @@
     "status": {
       "recording": "RECORDING",
       "processing": "TRANSCRIBING & GENERATING MOM...",
-      "idle": "Idle"
+      "idle": "Idle",
+      "startedToast": "Meeting recording started. Listening to mic & system audio.",
+      "startedToastMicOnly": "Meeting recording started. Listening to microphone (system audio loopback is Windows-only).",
+      "processingToast": "Processing meeting audio & generating MOM..."
     },
+    "platformNoticeTitle": "Microphone-Only Capture (macOS / Linux)",
+    "platformNoticeDesc": "Meeting Mode captures your microphone on this platform. Dual-track system audio loopback capture is currently supported on Windows.",
+    "platformNoticeTooltip": "System audio loopback requires Windows WASAPI. On macOS/Linux, Babbl records your microphone cleanly.",
     "actions": {
       "start": "Start Meeting Mode",
       "end": "End Meeting & Create MOM",
