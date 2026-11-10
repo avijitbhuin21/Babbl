@@ -404,7 +404,10 @@ impl ModelManager {
         partial_path: &Path,
         cancel_flag: &AtomicBool,
     ) -> std::result::Result<u64, DownloadError> {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .user_agent(format!("Babbl/{}", env!("CARGO_PKG_VERSION")))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         let mut resume_from = file_len(partial_path);
         if resume_from > 0 {
             info!("Resuming download of model {} from byte {}", model_id, resume_from);

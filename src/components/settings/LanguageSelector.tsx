@@ -44,9 +44,11 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
 
   // Language selection is supported when using online providers, regardless of local model.
   // Single-language local models have nothing to pick.
-  const localModel = models.find((model) => model.id === currentModel);
+  const localModel = Array.isArray(models)
+    ? models.find((model) => model.id === currentModel)
+    : undefined;
   const isUnsupported =
-    !useOnlineProvider && !!localModel && localModel.languages.length <= 1;
+    !useOnlineProvider && !!localModel && (localModel.languages?.length ?? 0) <= 1;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

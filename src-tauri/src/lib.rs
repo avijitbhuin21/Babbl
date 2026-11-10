@@ -1,4 +1,4 @@
-mod actions;
+pub mod actions;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod apple_intelligence;
 mod audio_feedback;
@@ -11,7 +11,7 @@ mod input;
 mod input_hook;
 mod llm_client;
 mod llm_types;
-mod managers;
+pub mod managers;
 mod notify;
 mod overlay;
 mod perf_monitor;
@@ -101,10 +101,12 @@ fn show_main_window(app: &AppHandle) {
         if let Err(e) = main_window.show() {
             log::error!("Failed to show window: {}", e);
         }
+        let _ = main_window.unminimize();
         // Then, bring it to the front and give it focus
         if let Err(e) = main_window.set_focus() {
             log::error!("Failed to focus window: {}", e);
         }
+
         // Optional: On macOS, ensure the app becomes active if it was an accessory
         #[cfg(target_os = "macos")]
         {
@@ -134,12 +136,17 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     );
     let history_manager =
         Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
+    let meeting_manager = Arc::new(managers::meeting::MeetingManager::new(
+        app_handle,
+        transcription_manager.clone(),
+    ));
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+    app_handle.manage(meeting_manager.clone());
 
     // Initialize the keyboard shortcuts
     shortcut::init_shortcuts(app_handle);
@@ -170,16 +177,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Choose the appropriate initial icon based on theme
     let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
 
-    let tray = TrayIconBuilder::new()
-        .icon(
-            Image::from_path(
-                app_handle
-                    .path()
-                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
-                    .unwrap(),
-            )
-            .unwrap(),
-        )
+    let initial_icon = app_handle
+        .path()
+        .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
+        .ok()
+        .and_then(|p| Image::from_path(&p).ok())
+        .or_else(|| app_handle.default_window_icon().cloned());
+
+    let mut builder = TrayIconBuilder::new()
         .show_menu_on_left_click(true)
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -212,13 +217,22 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 app.exit(0);
             }
             _ => {}
-        })
-        .build(app_handle)
-        .unwrap();
-    app_handle.manage(tray);
+        });
 
-    // Initialize tray menu with idle state
-    utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
+    if let Some(icon) = initial_icon {
+        builder = builder.icon(icon);
+    }
+
+    match builder.build(app_handle) {
+        Ok(tray) => {
+            app_handle.manage(tray);
+            // Initialize tray menu with idle state
+            utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
+        }
+        Err(e) => {
+            log::warn!("Tray icon creation skipped: {:?}", e);
+        }
+    }
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
@@ -278,8 +292,8 @@ pub fn run() {
         shortcut::change_post_process_api_key_setting,
         shortcut::change_post_process_model_setting,
         shortcut::set_post_process_provider,
-            shortcut::fetch_post_process_models,
-            shortcut::fetch_online_transcription_models,
+        shortcut::fetch_post_process_models,
+        shortcut::fetch_online_transcription_models,
         shortcut::add_post_process_prompt,
         shortcut::update_post_process_prompt,
         shortcut::delete_post_process_prompt,
@@ -288,9 +302,9 @@ pub fn run() {
         shortcut::suspend_binding,
         shortcut::resume_binding,
         shortcut::change_mute_while_recording_setting,
-            shortcut::change_append_trailing_space_setting,
-            shortcut::change_use_gpu_setting,
-            shortcut::change_live_transcription_setting,
+        shortcut::change_append_trailing_space_setting,
+        shortcut::change_use_gpu_setting,
+        shortcut::change_live_transcription_setting,
         shortcut::change_app_language_setting,
         shortcut::change_update_checks_setting,
         shortcut::change_use_online_provider_setting,
@@ -343,8 +357,8 @@ pub fn run() {
         commands::models::set_active_model,
         commands::models::get_current_model,
         commands::models::get_transcription_model_status,
-            commands::models::is_model_loading,
-            commands::models::get_transcription_device,
+        commands::models::is_model_loading,
+        commands::models::get_transcription_device,
         commands::models::has_any_models_available,
         commands::models::has_any_models_or_downloads,
         commands::models::get_recommended_first_model,
@@ -370,6 +384,17 @@ pub fn run() {
         commands::history::delete_history_entry,
         commands::history::update_history_limit,
         commands::history::update_recording_retention_period,
+        commands::meeting::start_meeting,
+        commands::meeting::stop_meeting,
+        commands::meeting::get_meeting_status,
+        commands::meeting::get_last_meeting,
+        commands::meeting::get_live_meeting_transcript,
+        commands::meeting::send_meeting_mom_email,
+        commands::meeting::get_meeting_email_settings,
+        commands::meeting::save_meeting_email_settings,
+        commands::meeting::clear_meeting_email_credentials,
+        commands::meeting::ask_meeting_assistant,
+        commands::meeting::get_past_meetings,
         helpers::clamshell::is_laptop,
     ]);
 

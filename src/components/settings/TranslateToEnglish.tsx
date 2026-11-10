@@ -34,15 +34,17 @@ export const TranslateToEnglish: React.FC<TranslateToEnglishProps> = React.memo(
     const isWhisperModel = onlineModel.toLowerCase().includes("whisper");
 
     // Translation is supported when using online providers, regardless of local model
-    const localModel = models.find((model) => model.id === currentModel);
+    const localModel = Array.isArray(models)
+      ? models.find((model) => model.id === currentModel)
+      : undefined;
     const isDisabledTranslation =
       !useOnlineProvider && !!localModel && !localModel.supports_translate;
 
     const description = useMemo(() => {
       if (isDisabledTranslation) {
-        const currentModelDisplayName = models.find(
-          (model) => model.id === currentModel,
-        )?.name;
+        const currentModelDisplayName = Array.isArray(models)
+          ? models.find((model) => model.id === currentModel)?.name
+          : undefined;
         return t(
           "settings.advanced.translateToEnglish.descriptionUnsupported",
           {

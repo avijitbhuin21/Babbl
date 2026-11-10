@@ -317,6 +317,12 @@ pub struct AppSettings {
     pub refine_provider_id: String,
     #[serde(default)]
     pub refine_models: HashMap<String, String>,
+    #[serde(default)]
+    pub meeting_sender_email: String,
+    #[serde(default)]
+    pub meeting_app_password: String,
+    #[serde(default)]
+    pub meeting_default_recipients: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -677,6 +683,9 @@ pub fn get_default_settings() -> AppSettings {
         refine_enabled: default_refine_enabled(),
         refine_provider_id: String::new(),
         refine_models: HashMap::new(),
+        meeting_sender_email: String::new(),
+        meeting_app_password: String::new(),
+        meeting_default_recipients: Vec::new(),
     }
 }
 

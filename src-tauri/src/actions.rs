@@ -30,11 +30,12 @@ pub trait ShortcutAction: Send + Sync {
 struct TranscribeAction;
 
 /// Online provider configuration for audio transcription
-struct OnlineTranscriptionProvider {
-    provider_id: String,
-    base_url: String,
-    model: String,
-    api_key: String,
+#[derive(Clone, Debug)]
+pub struct OnlineTranscriptionProvider {
+    pub provider_id: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
 }
 
 /// Convert f32 audio samples to WAV format in memory
@@ -70,7 +71,7 @@ fn convert_samples_to_wav(audio_samples: &[f32]) -> Result<Vec<u8>, String> {
 }
 
 /// Transcribe audio using an online provider (OpenAI, Groq, Gemini)
-async fn transcribe_online(
+pub async fn transcribe_online(
     provider: OnlineTranscriptionProvider,
     audio_samples: Vec<f32>,
     language: Option<String>,
@@ -188,8 +189,6 @@ async fn transcribe_online(
         })?;
 
     let status = response.status();
-    info!("[Cloud Transcription] Received response with status: {}", status);
-
     if !status.is_success() {
         let error_text = response
             .text()
@@ -512,7 +511,7 @@ async fn transcribe_online_chat_audio(
 }
 
 /// Get the online provider configuration from settings
-fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTranscriptionProvider> {
+pub fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTranscriptionProvider> {
     let provider_id = &settings.online_provider_id;
     let api_key = settings
         .online_provider_api_keys
@@ -561,6 +560,45 @@ fn get_online_transcription_provider(settings: &AppSettings) -> Option<OnlineTra
         model,
         api_key,
     })
+}
+
+/// Unified transcription helper that respects user settings (online provider vs local model).
+/// When local transcription is configured, audio strictly stays on device and is never sent to the cloud.
+pub async fn transcribe_audio(
+    app_handle: &AppHandle,
+    samples: Vec<f32>,
+    translate_to_english: bool,
+) -> Result<String, String> {
+    let settings = get_settings(app_handle);
+    if settings.use_online_provider {
+        if let Some(provider) = get_online_transcription_provider(&settings) {
+            let language = if settings.selected_language == "auto" {
+                None
+            } else {
+                Some(settings.selected_language.clone())
+            };
+            transcribe_online(provider, samples, language, translate_to_english).await
+        } else {
+            Err("Online provider is not configured. Please add an API key under Online Providers in Settings.".to_string())
+        }
+    } else {
+        let tm = app_handle.state::<Arc<TranscriptionManager>>().inner().clone();
+        if !tm.is_model_loaded() {
+            // Attempt to load the selected model if not loaded yet
+            if let Err(e) = tm.load_model(&settings.selected_model) {
+                return Err(format!(
+                    "Local transcription model is not loaded ({}). Please check your selected model in Settings.",
+                    e
+                ));
+            }
+        }
+        tokio::task::spawn_blocking(move || {
+            tm.transcribe(samples)
+                .map_err(|e| format!("Local transcription failed: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Transcription task panicked: {}", e))?
+    }
 }
 
 

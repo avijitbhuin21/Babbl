@@ -1,6 +1,7 @@
 {
   "sidebar": {
     "general": "General",
+    "meeting": "Meeting Mode",
     "advanced": "Advanced",
     "postProcessing": "Post Process",
     "cloudProviders": "Cloud Providers",
@@ -479,5 +480,177 @@
     "transcribing": "Transcribing...",
     "refining": "Refining...",
     "error": "Error"
+  },
+  "meeting": {
+    "title": "Meeting Mode",
+    "description": "Dual-track recording captures your microphone (\"You\") and conference audio (\"Attendee\") with live transcription and automatic Minutes of Meeting.",
+    "headphoneTip": "Tip: Wear headphones during meetings to prevent remote attendee speech from echoing back into your microphone.",
+    "status": {
+      "recording": "RECORDING",
+      "processing": "TRANSCRIBING & GENERATING MOM...",
+      "idle": "Idle",
+      "startedToast": "Meeting recording started. Listening to mic & system audio.",
+      "startedToastMicOnly": "Meeting recording started. Listening to microphone (system audio loopback is Windows-only).",
+      "processingToast": "Processing meeting audio & generating MOM..."
+    },
+    "platformNoticeTitle": "Microphone-Only Capture (macOS / Linux)",
+    "platformNoticeDesc": "Meeting Mode captures your microphone on this platform. Dual-track system audio loopback capture is currently supported on Windows.",
+    "platformNoticeTooltip": "System audio loopback requires Windows WASAPI. On macOS/Linux, Babbl records your microphone cleanly.",
+    "actions": {
+      "start": "Start Meeting Mode",
+      "end": "End Meeting & Create MOM",
+      "copyTranscript": "Copy",
+      "copyMom": "Copy MOM",
+      "copied": "Copied",
+      "downloadPdf": "Download PDF",
+      "sendEmail": "Send via Gmail"
+    },
+    "tabs": {
+      "live": "Live Meeting & MOM",
+      "copilot": "AI Copilot & Assistant",
+      "history": "Past Meetings Memory"
+    },
+    "monitors": {
+      "title": "Audio Channels",
+      "info": "Dual-channel capture isolates your voice on channel 0 and meeting participants on channel 1.",
+      "duration": "Duration",
+      "live": "LIVE",
+      "stopped": "STOPPED",
+      "mic": "Your Microphone (You)",
+      "micDesc": "Dedicated user voice stream with zero speaker ambiguity",
+      "system": "System / Attendees Audio",
+      "systemDesc": "WASAPI loopback capturing Zoom, Teams & browser audio"
+    },
+    "configuration": {
+      "title": "Capture & Transcription Settings",
+      "info": "Configure dual-channel audio capture and automatic English translation.",
+      "translateLabel": "Translate foreign speech to English",
+      "translateDesc": "Automatically translates speech from foreign languages to English during transcription",
+      "separationThreshold": "Speaker Separation Threshold",
+      "separationDesc": "Cosine similarity cutoff for clustering remote speakers"
+    },
+    "liveTranscript": {
+      "title": "Ongoing Real-Time Meeting Transcript",
+      "turns": "{{count}} spoken turns",
+      "askCopilot": "Ask Copilot About Ongoing Meeting",
+      "listening": "Listening for speech... Continuous live transcription streams here automatically."
+    },
+    "results": {
+      "diarizedTranscript": "Dual-Track English Transcript",
+      "turnsCount": "({{count}} turns)",
+      "noSpeech": "No speech segments detected.",
+      "momTitle": "Generated Minutes of Meeting (MOM)",
+      "readyToSend": "Ready to Send",
+      "noMom": "No MOM generated yet."
+    },
+    "emptyState": {
+      "title": "No Meeting Recorded Yet",
+      "description": "Click Start Meeting Mode above before starting your Google Meet, Zoom, or online call. Both your microphone and attendee audio will be captured and converted into structured Minutes of Meeting."
+    },
+    "emailModal": {
+      "title": "Send MOM via Gmail",
+      "description": "Dispatch meeting minutes using your Gmail account & App Password.",
+      "senderLabel": "Your Gmail Address",
+      "senderPlaceholder": "e.g. you@gmail.com",
+      "passwordLabel": "Gmail App Password",
+      "passwordHint": "16-character Google App Password",
+      "passwordTip": "Generate in your Google Account → Security → 2-Step Verification → App Passwords.",
+      "passwordSavedPlaceholder": "•••••••••••••••• (Saved in desktop settings)",
+      "recipientsLabel": "Recipients (comma or newline separated)",
+      "recipientsPlaceholder": "colleague@example.com, manager@example.com",
+      "subjectLabel": "Email Subject",
+      "subjectPlaceholder": "Meeting Summary",
+      "attachmentTitle": "Full Transcript & AI Notes PDF Attached",
+      "attachmentDesc": "Includes dual-track speaker separation, timestamps, and MOM",
+      "rememberCredentials": "Save credentials securely in desktop settings",
+      "rememberCredentialsDesc": "Stores your sender address and password in backend settings so you don't have to re-type them.",
+      "clearCredentials": "Clear saved credentials",
+      "clearConfirm": "Are you sure you want to remove your saved email credentials from backend settings?",
+      "clearedSuccess": "Saved email credentials removed.",
+      "savedBadge": "Saved in desktop settings",
+      "senderRequired": "Please enter your Gmail address.",
+      "passwordRequired": "Please enter your 16-character Gmail App Password.",
+      "recipientsRequired": "Please specify at least one recipient email address.",
+      "sendingToast": "Sending MOM with transcript PDF...",
+      "defaultSubject": "Minutes of Meeting",
+      "sentSuccess": "MOM & Transcript PDF delivered successfully!",
+      "sentFailed": "Email delivery failed",
+      "sentError": "Error sending email",
+      "preview": "Preview",
+      "cancel": "Cancel",
+      "send": "Send MOM Now",
+      "sending": "Sending Email..."
+    },
+    "assistant": {
+      "title": "Meeting Intelligence Copilot",
+      "activeCopilot": "Active Copilot",
+      "capabilities": "Capabilities: Real-time Transcript Q&A • Web Fact Verification • Past Meeting Memory",
+      "welcome": "Hello! I am your **Meeting Intelligence Assistant**.\n\nHere is how I can help:\n- **Live Q&A & Copilot**: Ask me questions about what participants or you have spoken in the current call.\n- **Past Meeting Memory**: Search past decisions, attendees, and topics saved in your local SQLite history.\n- **Real-Time Fact Verification**: Ask me to verify claims or regulations, and I will search the web and provide direct markdown citation links.\n- **Action Items & Summaries**: Extract key takeaways, deadlines, and follow-ups instantly.",
+      "quickPromptsTitle": "Quick Prompts:",
+      "quickPrompts": {
+        "summarize": "Summarize discussion so far",
+        "summarizePrompt": "Can you provide a clear and concise summary of the key points discussed so far?",
+        "verify": "Verify last statement with web links",
+        "verifyPrompt": "Please verify the facts and statements from the discussion on the web, and provide reliable citation links.",
+        "searchPast": "Search past meeting decisions",
+        "searchPastPrompt": "Can you search past meetings in the database and list what decisions or action items were agreed upon previously?",
+        "actionItems": "Extract action items & next steps",
+        "actionItemsPrompt": "Extract all action items, assignees, and next steps mentioned in this meeting.",
+        "unanswered": "What questions remain unanswered?",
+        "unansweredPrompt": "Review the discussion and list any open questions or concerns that were raised but not yet answered."
+      },
+      "context": {
+        "meetingPrefix": "Meeting:",
+        "liveMeeting": "Live Meeting ({{turns}} turns)",
+        "transcriptWords": "Transcript ({{words}} words)",
+        "noTranscript": "No meeting transcript",
+        "detachPast": "Detach past meeting context",
+        "loadedToast": "Loaded past meeting \"{{title}}\" into Copilot context."
+      },
+      "liveBanner": {
+        "inProgress": "Live Meeting In Progress",
+        "turnsLive": "{{turns}} turns transcribed live",
+        "hint": "Copilot automatically knows what was spoken up to this second"
+      },
+      "chat": {
+        "toolsInvoked": "Tools invoked:",
+        "webVerification": "Web Verification",
+        "pastMemory": "Past Meeting Memory",
+        "liveTranscript": "Live Transcript",
+        "analyzing": "Analyzing transcript, executing tools & verifying...",
+        "inputPlaceholder": "Ask anything about this meeting, search past decisions, or verify facts...",
+        "sendTitle": "Send Message (Enter)",
+        "inputHint": "Press Enter to send, Shift+Enter for new line",
+        "privacyHint": "Privacy: Audio stays local; questions use configured Refine model",
+        "clearTitle": "Clear Chat History",
+        "clearedToast": "Cleared conversation history",
+        "clearedWelcome": "Chat history cleared. How can I assist you with your meeting?",
+        "errorTitle": "Error communicating with assistant:"
+      }
+    },
+    "history": {
+      "title": "Cross-Meeting Memory & History",
+      "sqliteTag": "SQLite indexed",
+      "description": "Every meeting, decision, MOM, and participant list is preserved and queryable by both you and the AI Copilot.",
+      "searchPlaceholder": "Search past decisions, attendees, topics...",
+      "searchButton": "Search",
+      "emptyTitle": "No Past Meetings Recorded",
+      "emptySearchTitle": "No matching meetings found",
+      "emptyDesc": "When you end a meeting recording, the full transcript, AI summary, and decisions will automatically appear here.",
+      "emptySearchDesc": "No meetings found matching \"{{query}}\". Try different keywords.",
+      "viewDetails": "View Details",
+      "downloadPdf": "PDF",
+      "askCopilot": "Ask Copilot",
+      "momTitle": "Minutes of Meeting (MOM)",
+      "copyMom": "Copy MOM",
+      "copied": "Copied",
+      "transcriptTitle": "Full Meeting Transcript",
+      "copyTranscript": "Copy Transcript",
+      "downloadPdfFull": "Download Styled PDF",
+      "askCopilotThis": "Ask Copilot About This Meeting",
+      "close": "Close",
+      "pdfSuccess": "Downloaded PDF for \"{{title}}\"",
+      "copiedToast": "Copied to clipboard!"
+    }
   }
 }
