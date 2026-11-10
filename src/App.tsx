@@ -21,10 +21,10 @@ function App() {
   const { settings, updateSetting } = useSettings();
 
   const page =
-    rail === "transcribe"
-      ? TRANSCRIBE_PAGES[transcribePages.includes(transcribePage) ? transcribePage : "general"]
-      : RAIL_ITEMS[rail];
-  const ActivePage = page.component;
+    (rail === "transcribe"
+      ? TRANSCRIBE_PAGES[transcribePages?.includes(transcribePage) ? transcribePage : "general"]
+      : RAIL_ITEMS[rail]) || RAIL_ITEMS.transcribe;
+  const ActivePage = page?.component || RAIL_ITEMS.transcribe.component;
 
   useEffect(() => {
     const unlisten = listen<AppErrorPayload>("babbl://error", (event) => {

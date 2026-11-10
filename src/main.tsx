@@ -7,7 +7,7 @@ import { installFrontendErrorForwarding } from "./lib/utils/frontendLog";
 import "./i18n";
 
 // Browser development fallback when running outside native Tauri window
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && !(window as any).__TAURI_INTERNALS__) {
   (window as any).__TAURI_OS_PLUGIN_INTERNALS__ = {
     eol: "\r\n",
     platform: "windows",
@@ -22,8 +22,7 @@ if (typeof window !== "undefined") {
     unregisterListener: () => {},
   };
 
-  if (!(window as any).__TAURI_INTERNALS__) {
-    const defaultSettings = {
+  const defaultSettings = {
       selected_language: "auto",
       always_on_microphone: false,
       audio_feedback: false,
@@ -74,7 +73,11 @@ if (typeof window !== "undefined") {
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args: any) => {
         console.log("[Browser Dev Mode] Mock invoke:", cmd, args);
-        if (cmd === "get_settings" || cmd === "get_default_settings") {
+        if (
+          cmd === "get_app_settings" ||
+          cmd === "get_settings" ||
+          cmd === "get_default_settings"
+        ) {
           return defaultSettings;
         }
         if (cmd === "get_meeting_email_settings") {
@@ -172,7 +175,6 @@ if (typeof window !== "undefined") {
   } else {
     installFrontendErrorForwarding("main");
   }
-}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
