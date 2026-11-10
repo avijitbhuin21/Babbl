@@ -177,16 +177,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Choose the appropriate initial icon based on theme
     let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
 
-    let tray = TrayIconBuilder::new()
-        .icon(
-            Image::from_path(
-                app_handle
-                    .path()
-                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
-                    .unwrap(),
-            )
-            .unwrap(),
-        )
+    let initial_icon = app_handle
+        .path()
+        .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
+        .ok()
+        .and_then(|p| Image::from_path(&p).ok())
+        .or_else(|| app_handle.default_window_icon().cloned());
+
+    let mut builder = TrayIconBuilder::new()
         .show_menu_on_left_click(true)
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -219,13 +217,22 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 app.exit(0);
             }
             _ => {}
-        })
-        .build(app_handle)
-        .unwrap();
-    app_handle.manage(tray);
+        });
 
-    // Initialize tray menu with idle state
-    utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
+    if let Some(icon) = initial_icon {
+        builder = builder.icon(icon);
+    }
+
+    match builder.build(app_handle) {
+        Ok(tray) => {
+            app_handle.manage(tray);
+            // Initialize tray menu with idle state
+            utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle);
+        }
+        Err(e) => {
+            log::warn!("Tray icon creation skipped: {:?}", e);
+        }
+    }
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
