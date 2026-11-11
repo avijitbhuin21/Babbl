@@ -23,6 +23,11 @@ export const MODELS = [
   { file: 'Fun-ASR-MLT-Nano-2512-Q8_0.gguf', url: 'https://huggingface.co/handy-computer/Fun-ASR-MLT-Nano-2512-gguf/resolve/0b8f9c7bc545a219658aeb1dd4eeaa55d1cf89f3/Fun-ASR-MLT-Nano-2512-Q8_0.gguf', size: 891271232, sha256: 'd12476d8d9f2baa0ebf738fa955fa05ed33a654f1567289033a810c45d9d9002' },
   { file: 'SenseVoiceSmall-Q8_0.gguf', url: 'https://huggingface.co/handy-computer/SenseVoiceSmall-gguf/resolve/4a08b8e900b38a977e32eb08d5d0697d6e72ba04/SenseVoiceSmall-Q8_0.gguf', size: 252684608, sha256: '6c759ee4c9748c9b3f7a5a60ca74f0f7e685fb9d45d1378fce7cfd62f59adf29' },
   { file: 'gigaam-v3-e2e-ctc-Q8_0.gguf', url: 'https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/075dff81f843cf23d22b4ce943ffdc4dd8650cd7/gigaam-v3-e2e-ctc-Q8_0.gguf', size: 272151136, sha256: '9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb' },
+  // Local LLMs for meeting minutes (src-tauri/src/managers/llm_catalog.rs).
+  { file: 'Qwen3.5-4B-Q4_K_M.gguf', url: 'https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf', size: 2740937888, sha256: '00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4' },
+  { file: 'Phi-4-mini-instruct-Q4_K_M.gguf', url: 'https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/78eb92a46fc37e6b524df991ed9aca9bc6aa7b80/Phi-4-mini-instruct-Q4_K_M.gguf', size: 2491874272, sha256: '88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a' },
+  { file: 'gemma-4-E2B-it-Q4_K_M.gguf', url: 'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/0314792d7f1f7e229411f620751375812bb9faf2/gemma-4-E2B-it-Q4_K_M.gguf', size: 3106738272, sha256: '740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8' },
+  { file: 'Qwen3.5-2B-Q4_K_M.gguf', url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf', size: 1280835840, sha256: 'aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223' },
 ];
 
 /** Mirrors `models` (default: all), skipping files already present with the right size; verifies SHA-256 in flight. */
